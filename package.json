@@ -1,0 +1,24 @@
+{
+  "name": "wraply",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev:user": "pnpm --filter wraply-user dev",
+    "dev:api": "pnpm --filter wraply-api start",
+    "dev:worker": "pnpm --filter wraply-worker start",
+    "dev:admin": "pnpm --filter wraply-admin dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://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@github.com/zzazung/wraply.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/zzazung/wraply/issues"
+  },
+  "homepage": "https://github.com/zzazung/wraply#readme"
+}

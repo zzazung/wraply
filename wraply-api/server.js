@@ -1,0 +1,65 @@
+// api/server.js
+const express = require("express");
+const http = require("http");
+const path = require("path");
+const cors = require("cors");
+
+const { initWebSocket } = require("./websocket");
+
+const authRoutes = require("./routes/auth");
+const jobsRouter = require("./routes/jobs");
+const internalRouter = require("./routes/internal");
+const androidSigningRouter = require("./routes/signing.android");
+const userProjectsRouter = require("./routes/user.projects");
+
+require('dotenv').config();
+
+const CI_ROOT = process.env.CI_ROOT || process.cwd();
+const PORT = Number(process.env.API_PORT || 4000);
+
+const app = express();
+
+// CORS는 반드시 라우터보다 위에 있어야 한다.
+const corsOptions = {
+    origin: function (origin, callback) {
+        const allowed = [
+            'http://localhost:3000',
+            'http://localhost:3001',
+            'http://192.168.0.177:3000',
+            'http://192.168.0.177:3001',
+        ];
+
+        if (!origin || allowed.includes(origin)) {
+            callback(null, origin); // 정확한 origin 반환
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true
+};
+app.use(cors(corsOptions));
+// app.options("*", cors(corsOptions));
+
+app.use(express.json({ limit: "2mb" }));
+
+// ✅ builds 정적 서빙 (항상 CI_ROOT 기준)
+app.use("/downloads", express.static(path.join(CI_ROOT, "builds")));
+
+// routes
+app.use("/auth", authRoutes);
+app.use("/jobs", jobsRouter);
+app.use("/internal", internalRouter);
+app.use("/android/signing", androidSigningRouter);
+app.use("/user", userProjectsRouter);
+
+app.get("/health", (_, res) => res.json({ ok: true }));
+
+const server = http.createServer(app);
+
+// ✅ websocket 연결
+initWebSocket(server);
+
+server.listen(PORT, () => {
+  console.log(`✅ Wraply API listening on ${PORT}`);
+  console.log(`📦 downloads: ${path.join(CI_ROOT, "builds")}`);
+});
