@@ -1,28 +1,60 @@
-const express = require("express");
-const router = express.Router();
+const express = require("express")
+const bcrypt = require("bcryptjs")
+const { v4: uuidv4 } = require("uuid")
 
-// MVP: 테스트용 로그인 (실서비스는 DB 검증 + JWT 발급)
+const pool = require("../db")
+const { signToken } = require("../lib/jwt")
+
+const router = express.Router()
+
 router.post("/login", async (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: "Missing fields" });
 
-  // TODO: 실제 user 검증
-  const token = "dummy_token";
+  const { email, password } = req.body
 
-  // 쿠키로 줄 거면:
-  res.cookie("wraply_token", token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: false,
-  });
+  const [rows] = await pool.query(
+    "SELECT * FROM users WHERE email=?",
+    [email]
+  )
 
-  // 프론트가 token을 직접 쓰는 구조면 json으로도 반환
-  return res.json({ token, user: { email } });
-});
+  const user = rows[0]
 
-router.get("/me", async (req, res) => {
-  // TODO: Bearer 또는 cookie 검증
-  return res.json({ user: { ok: true } });
-});
+  if (!user) {
+    return res.status(401).json({ error: "Invalid credentials" })
+  }
 
-module.exports = router;
+  const ok = await bcrypt.compare(password, user.password_hash)
+
+  if (!ok) {
+    return res.status(401).json({ error: "Invalid credentials" })
+  }
+
+  const token = signToken(user)
+
+  res.json({
+    token
+  })
+
+})
+
+router.post("/register", async (req, res) => {
+
+  const { email, password } = req.body
+
+  const hash = await bcrypt.hash(password, 10)
+
+  const id = uuidv4()
+
+  await pool.query(
+    "INSERT INTO users (id,email,password_hash) VALUES (?,?,?)",
+    [id, email, hash]
+  )
+
+  const token = signToken({ id, email })
+
+  res.json({
+    token
+  })
+
+})
+
+module.exports = router

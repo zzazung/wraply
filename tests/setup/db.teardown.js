@@ -1,6 +1,7 @@
 const mysql = require("mysql2/promise")
+require('dotenv').config({ path: '.env.test', quiet: true });
 
-const DB_NAME = process.env.DB_NAME || "wraply_test"
+const DB_NAME = process.env.DB_NAME;
 
 module.exports = async () => {
 
