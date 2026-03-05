@@ -1,3 +1,17 @@
+jest.mock("../../wraply-api/middleware/auth", () => {
+
+  return (req, res, next) => {
+
+    req.user = {
+      id: "test_user"
+    }
+
+    next()
+
+  }
+
+})
+
 const request = require("supertest")
 const express = require("express")
 
@@ -18,7 +32,7 @@ describe("Full Pipeline", () => {
 
     const projectId = "test_project_" + Date.now()
 
-    // 테스트용 프로젝트 생성
+    // 테스트 프로젝트 생성
     await pool.query(`
       INSERT INTO projects (
         id,
@@ -41,25 +55,29 @@ describe("Full Pipeline", () => {
       .send({
         platform: "android"
       })
-    console.log("Build Response:", buildRes.body)
 
-    const jobId =
-      buildRes.body.jobId ||
-      buildRes.body.job_id ||
-      buildRes.body.job?.job_id
+    expect(buildRes.statusCode).toBe(200)
+
+    // job이 생성되었는지 DB 확인
+    const [rows] = await pool.query(`
+      SELECT * FROM jobs
+      WHERE project_id = ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [projectId])
+
+    expect(rows.length).toBeGreaterThan(0)
+
+    const jobId = rows[0].job_id
 
     expect(jobId).toBeDefined()
 
-    // job 조회
+    // job API 조회
     const jobRes = await request(app)
       .get(`/jobs/${jobId}`)
 
     expect(jobRes.statusCode).toBe(200)
 
-    await pool.query(
-      "DELETE FROM projects WHERE id=?",
-      [projectId]
-    )
   })
 
 })

@@ -15,16 +15,16 @@ describe("Multiple Build Jobs", () => {
 
       jobs.push(
         queue.add("build", {
-          jobId: `job_${i}`,
+          jobId: "job_" + i,
           platform: "android"
         })
       )
 
     }
 
-    const results = await Promise.all(jobs)
+    const result = await Promise.all(jobs)
 
-    expect(results.length).toBe(10)
+    expect(result.length).toBe(10)
 
     await queue.close()
     await connection.quit()

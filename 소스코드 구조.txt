@@ -35,3 +35,25 @@ wraply-worker
  └ templates // This directory contains the base templates for both Android and iOS builds.
      ├ android
      └ ios
+
+jest.config.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/jest.config.js
+scripts
+ └ fake_build.sh https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/scripts/fake_build.sh
+tests
+ ├ api
+ │   ├ jobs.test.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/tests/api/jobs.test.js
+ │   ├ projects.test.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/tests/api/projects.test.js
+ │   └ logbus.test.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/tests/api/logbus.test.js
+ ├ worker
+ │   ├ buildWorker.test.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/tests/worker/buildWorker.test.js
+ │   └ artifactScan.test.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/tests/worker/artifactScan.test.js
+ ├ websocket
+ │   └ logstream.test.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/tests/websocket/logstream.test.js
+ ├ queue
+ │   └ buildQueue.test.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/tests/queue/buildQueue.test.js
+ ├ e2e
+ │   ├ build.e2e.test.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/tests/e2e/build.e2e.test.js
+ │   └ pipeline.e2e.test.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/tests/e2e/pipeline.e2e.test.js
+ └ setup
+     ├ db.setup.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/tests/setup/db.setup.js
+     └ db.teardown.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/tests/setup/db.teardown.js

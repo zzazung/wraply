@@ -5,9 +5,10 @@ const DB_NAME = process.env.DB_NAME || "wraply_test"
 module.exports = async () => {
 
   const conn = await mysql.createConnection({
-    host: process.env.DB_HOST || "localhost",
-    user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "000000"
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD
   })
 
   await conn.query(`DROP DATABASE IF EXISTS ${DB_NAME}`)

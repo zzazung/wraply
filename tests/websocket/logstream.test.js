@@ -1,12 +1,16 @@
-const WebSocket = require("ws")
 const http = require("http")
-const { initWebSocket } = require("../../wraply-api/websocket")
+const WebSocket = require("ws")
+
+const {
+  initWebSocket,
+  broadcastLog
+} = require("../../wraply-api/websocket")
 
 describe("Log Streaming", () => {
 
   let server
 
-  beforeAll((done) => {
+  beforeAll(done => {
 
     server = http.createServer()
 
@@ -16,26 +20,23 @@ describe("Log Streaming", () => {
 
   })
 
-  afterAll((done) => {
+  afterAll(done => {
 
     server.close(done)
 
   })
 
-  test("receive log stream", (done) => {
+  test("receive log stream", done => {
 
     const ws = new WebSocket("ws://localhost:4010?jobId=test_job")
 
     ws.on("open", () => {
 
-      const { broadcastLog } =
-        require("../../wraply-api/websocket")
-
       broadcastLog("test_job", "hello log")
 
     })
 
-    ws.on("message", (msg) => {
+    ws.on("message", msg => {
 
       const data = JSON.parse(msg)
 
