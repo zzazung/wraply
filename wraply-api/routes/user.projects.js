@@ -1,7 +1,8 @@
 // api/routes/user.projects.js
 const express = require("express");
 const { v4: uuidv4 } = require("uuid");
-const pool = require("../../db");
+const { enqueueBuild } = require("../queue/buildQueue");
+const pool = require("../db");
 
 const router = express.Router();
 
@@ -139,20 +140,39 @@ router.post("/projects/:projectId/builds", requireUser, async (req, res) => {
 
 // ✅ 프로젝트 빌드 이력
 router.get("/projects/:projectId/builds", requireUser, async (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const [rows] = await pool.query(
-      `SELECT job_id, project_id, platform, status, progress, package_name, app_name, url,
-              created_at, updated_at, finished_at, error_reason
-       FROM jobs
-       WHERE project_id=?
-       ORDER BY created_at DESC`,
-      [projectId]
-    );
-    res.json({ items: rows });
-  } catch (e) {
-    res.status(500).json({ error: String(e.message || e) });
-  }
+  // try {
+  //   const { projectId } = req.params;
+  //   const [rows] = await pool.query(
+  //     `SELECT job_id, project_id, platform, status, progress, package_name, app_name, url,
+  //             created_at, updated_at, finished_at, error_reason
+  //      FROM jobs
+  //      WHERE project_id=?
+  //      ORDER BY created_at DESC`,
+  //     [projectId]
+  //   );
+  //   res.json({ items: rows });
+  // } catch (e) {
+  //   res.status(500).json({ error: String(e.message || e) });
+  // }
+
+  const { projectId } = req.params;
+
+  const jobId = `job_${crypto.randomUUID()}`;
+
+  await db.query(
+    `INSERT INTO jobs(job_id, project_id, status, progress)
+     VALUES(?,?, 'queued', 0)`,
+    [jobId, projectId]
+  );
+
+  await enqueueBuild({
+    jobId,
+    projectId
+  });
+
+  res.json({
+    jobId
+  });
 });
 
 module.exports = router;

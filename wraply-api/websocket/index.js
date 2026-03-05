@@ -1,6 +1,8 @@
 // api/websocket.js
 const WebSocket = require("ws");
 
+const { subscribeLogs } = require("../bus/logBus");
+
 const clients = new Map(); // ws -> jobId
 
 function initWebSocket(server) {
@@ -25,7 +27,24 @@ function initWebSocket(server) {
     ws.on("close", () => {
       clients.delete(ws);
     });
+
+    ws.on("error", () => {
+      clients.delete(ws);
+    });
   });
+
+  // heartbeat: 30초마다 ping 보내기 (클라이언트가 끊긴 경우 감지)
+  setInterval(() => {
+    wss.clients.forEach((ws) => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        clients.delete(ws);
+      } else {
+        try {
+          ws.ping();
+        } catch {}
+      }
+    });
+  }, 30000);
 
   return wss;
 }
@@ -57,4 +76,23 @@ function broadcastStatus(jobId, payload) {
   }
 }
 
-module.exports = { initWebSocket, broadcastLog, broadcastStatus };
+subscribeLogs((data) => {
+  const { jobId, type, message, status, progress } = data;
+
+  if (type === "log") {
+    broadcastLog(jobId, message);
+  }
+
+  if (type === "status") {
+    broadcastStatus(jobId, {
+      status,
+      progress
+    });
+  }
+});
+
+module.exports = {
+  initWebSocket,
+  broadcastLog,
+  broadcastStatus
+};

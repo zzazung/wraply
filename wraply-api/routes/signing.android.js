@@ -3,13 +3,13 @@ const express = require("express");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
-const pool = require("../../db");
+const pool = require("../db");
 
 const {
   secureUploadDir,
   verifyAndSaveUploadedKey,
   ensureSigningKey,
-} = require("../../lib/androidSigning");
+} = require("../lib/androidSigning");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });

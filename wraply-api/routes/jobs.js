@@ -3,7 +3,7 @@ const express = require("express");
 const { v4: uuidv4 } = require("uuid");
 const fs = require("fs");
 const path = require("path");
-const pool = require("../../db");
+const pool = require("../db");
 
 require('dotenv').config();
 
@@ -127,72 +127,99 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ 반드시 /:jobId 보다 위
-router.get("/:jobId/artifacts", async (req, res) => {
-  try {
-    const { jobId } = req.params;
-
-    const [rows] = await pool.query(
-      "SELECT artifact_dir FROM jobs WHERE job_id = ?",
-      [jobId]
-    );
-    if (!rows.length) return res.status(404).json({ error: "Job not found" });
-
-    let artifactDir = rows[0].artifact_dir;
-    if (!artifactDir) return res.json({ items: [] });
-
-    // ✅ 절대경로가 저장되어 있어도 운영형으로 강제 보정
-    // 1) CI_ROOT 접두사가 있으면 잘라냄
-    if (path.isAbsolute(artifactDir)) {
-      artifactDir = path.relative(CI_ROOT, artifactDir);
-    }
-
-    // 2) builds/로 시작하지 않으면 builds 기준으로 보정(방어)
-    //    (artifactDir가 'android/...' 로만 올 수도 있으니)
-    if (!artifactDir.startsWith("builds/")) {
-      artifactDir = `builds/${artifactDir.replace(/^\/+/, "")}`;
-    }
-
-    const absDir = path.join(CI_ROOT, artifactDir);
-    if (!fs.existsSync(absDir)) return res.json({ items: [] });
-
-    const files = fs.readdirSync(absDir).filter((f) => !f.endsWith(".xcarchive"));
-
-    const base = API_BASE || `${req.protocol}://${req.get("host")}`;
-
-    const items = files.map((file) => {
-      // ✅ /downloads 는 CI_ROOT/builds 를 가리키므로
-      //    builds/ 를 제거한 나머지 경로만 붙인다
-      const relUnderBuilds = artifactDir.replace(/^builds\//, "");
-      const downloadUrl = `/downloads/${relUnderBuilds}/${file}`;
-      return {
-        name: file,
-        downloadUrl,
-        fullUrl: `${base}${downloadUrl}`,
-      };
-    });
-
-    res.json({ items });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
-
 /**
  * Job detail
  */
 router.get("/:jobId", async (req, res) => {
   try {
-    const { jobId } = req.params;
-    const [rows] = await pool.query(
-      `SELECT job_id, project_id, platform, package_name, safe_name, app_name, url, scheme,
-              status, progress, created_at, updated_at, finished_at, error_reason,
-              artifact_dir, log_path
-       FROM jobs WHERE job_id = ?`,
+    // const { jobId } = req.params;
+    // const [rows] = await pool.query(
+    //   `SELECT job_id, project_id, platform, package_name, safe_name, app_name, url, scheme,
+    //           status, progress, created_at, updated_at, finished_at, error_reason,
+    //           artifact_dir, log_path
+    //    FROM jobs WHERE job_id = ?`,
+    //   [jobId]
+    // );
+    // if (!rows.length) return res.status(404).json({ error: "Job not found" });
+    // res.json(rows[0]);
+
+    const jobId = req.params.jobId;
+
+    const rows = await db.query(
+      `SELECT * FROM jobs WHERE job_id=? LIMIT 1`,
       [jobId]
     );
-    if (!rows.length) return res.status(404).json({ error: "Job not found" });
+
+    if (!rows.length) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+
     res.json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// ✅ 반드시 /:jobId 보다 위
+router.get("/:jobId/artifacts", async (req, res) => {
+  try {
+    // const { jobId } = req.params;
+
+    // const [rows] = await pool.query(
+    //   "SELECT artifact_dir FROM jobs WHERE job_id = ?",
+    //   [jobId]
+    // );
+    // if (!rows.length) return res.status(404).json({ error: "Job not found" });
+
+    // let artifactDir = rows[0].artifact_dir;
+    // if (!artifactDir) return res.json({ items: [] });
+
+    // // ✅ 절대경로가 저장되어 있어도 운영형으로 강제 보정
+    // // 1) CI_ROOT 접두사가 있으면 잘라냄
+    // if (path.isAbsolute(artifactDir)) {
+    //   artifactDir = path.relative(CI_ROOT, artifactDir);
+    // }
+
+    // // 2) builds/로 시작하지 않으면 builds 기준으로 보정(방어)
+    // //    (artifactDir가 'android/...' 로만 올 수도 있으니)
+    // if (!artifactDir.startsWith("builds/")) {
+    //   artifactDir = `builds/${artifactDir.replace(/^\/+/, "")}`;
+    // }
+
+    // const absDir = path.join(CI_ROOT, artifactDir);
+    // if (!fs.existsSync(absDir)) return res.json({ items: [] });
+
+    // const files = fs.readdirSync(absDir).filter((f) => !f.endsWith(".xcarchive"));
+
+    // const base = API_BASE || `${req.protocol}://${req.get("host")}`;
+
+    // const items = files.map((file) => {
+    //   // ✅ /downloads 는 CI_ROOT/builds 를 가리키므로
+    //   //    builds/ 를 제거한 나머지 경로만 붙인다
+    //   const relUnderBuilds = artifactDir.replace(/^builds\//, "");
+    //   const downloadUrl = `/downloads/${relUnderBuilds}/${file}`;
+    //   return {
+    //     name: file,
+    //     downloadUrl,
+    //     fullUrl: `${base}${downloadUrl}`,
+    //   };
+    // });
+
+    // res.json({ items });
+
+    const jobId = req.params.jobId;
+
+    const rows = await db.query(
+      `SELECT name,path FROM artifacts WHERE job_id=?`,
+      [jobId]
+    );
+
+    const items = rows.map((r) => ({
+      name: r.name,
+      downloadUrl: `/downloads/${r.path}`,
+    }));
+
+    res.json({ items });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }

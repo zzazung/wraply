@@ -12,11 +12,15 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "bullmq": "^5.70.1",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "ioredis": "^5.10.0",
     "jsonwebtoken": "^9.0.3",
     "mariadb": "^3.5.1",
+    "multer": "^2.1.1",
+    "uuid": "^13.0.0",
     "ws": "^8.19.0",
     "zod": "^4.3.6"
   }
