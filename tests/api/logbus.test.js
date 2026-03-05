@@ -1,8 +1,8 @@
-const Redis = require("ioredis");
+const Redis = require("ioredis-mock");
 
 describe("Redis Log Bus", () => {
 
-  test("publish/subscribe works", async () => {
+  test("publish/subscribe", async () => {
 
     const pub = new Redis();
     const sub = new Redis();
@@ -11,7 +11,7 @@ describe("Redis Log Bus", () => {
 
     const message = { hello: "world" };
 
-    const received = new Promise(resolve => {
+    const promise = new Promise(resolve => {
 
       sub.on("message", (_, msg) => {
 
@@ -21,9 +21,12 @@ describe("Redis Log Bus", () => {
 
     });
 
-    await pub.publish("wraply:logs", JSON.stringify(message));
+    await pub.publish(
+      "wraply:logs",
+      JSON.stringify(message)
+    );
 
-    const data = await received;
+    const data = await promise;
 
     expect(data.hello).toBe("world");
 

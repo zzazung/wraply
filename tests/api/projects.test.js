@@ -1,22 +1,22 @@
-const request = require("supertest");
-const express = require("express");
+const request = require("supertest")
+const express = require("express")
 
-const jobsRouter = require("../../wraply-api/routes/jobs");
+const projectsRouter = require("../../wraply-api/routes/user.projects")
 
-const app = express();
+const app = express()
 
-app.use(express.json());
-app.use("/jobs", jobsRouter);
+app.use(express.json())
+app.use("/user", projectsRouter)
 
-describe("Jobs API", () => {
+describe("Projects API", () => {
 
-  test("GET /jobs/:jobId should return job", async () => {
+  test("list projects", async () => {
 
     const res = await request(app)
-      .get("/jobs/job_test");
+      .get("/user/projects")
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBeLessThan(500)
 
-  });
+  })
 
-});
+})

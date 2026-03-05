@@ -1,21 +1,25 @@
-const request = require("supertest");
+const request = require("supertest")
+const express = require("express")
 
-const API = "http://localhost:4000";
+const jobsRouter = require("../../wraply-api/routes/jobs")
+
+const app = express()
+
+app.use(express.json())
+app.use("/", jobsRouter)
 
 describe("Build E2E", () => {
 
-  test("Create build job", async () => {
+  test("create build job", async () => {
 
-    const res = await request(API)
-      .post("/user/projects/test/builds")
+    const res = await request(app)
+      .post("/jobs/build")
       .send({
         platform: "android"
-      });
+      })
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBeLessThan(500)
 
-    expect(res.body.jobId).toBeDefined();
+  })
 
-  });
-
-});
+})

@@ -1,20 +1,26 @@
-const { runBuild } = require("../../wraply-worker/queue/buildWorker");
+jest.mock("../../wraply-api/db", () => ({
 
-describe("Worker Build", () => {
+  query: jest.fn().mockResolvedValue([])
 
-  test("runBuild should execute without crash", async () => {
+}))
+
+const { runBuild } = require("../../wraply-worker/queue/buildWorker")
+
+describe("Build Worker", () => {
+
+  test("runBuild should not crash", async () => {
 
     const job = {
       jobId: "job_test",
       platform: "android",
-      safeName: "testapp",
+      safeName: "test",
       packageName: "com.test.app",
       appName: "TestApp",
       serviceUrl: "https://example.com"
-    };
+    }
 
-    await expect(runBuild(job)).resolves.not.toThrow();
+    await expect(runBuild(job)).resolves.not.toThrow()
 
-  });
+  })
 
-});
+})

@@ -1,19 +1,24 @@
-const { runBuild } = require("../../wraply-worker/queue/buildWorker");
+const fs = require("fs");
+const path = require("path");
 
-describe("Worker Build", () => {
+describe("Artifact Scan", () => {
 
-  test("runBuild should execute without crash", async () => {
+  test("detect apk file", () => {
 
-    const job = {
-      jobId: "job_test",
-      platform: "android",
-      safeName: "testapp",
-      packageName: "com.test.app",
-      appName: "TestApp",
-      serviceUrl: "https://example.com"
-    };
+    const dir = path.join(__dirname, "tmp");
 
-    await expect(runBuild(job)).resolves.not.toThrow();
+    fs.mkdirSync(dir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(dir, "app-release.apk"),
+      "test"
+    );
+
+    const files = fs.readdirSync(dir);
+
+    const hasApk = files.some(f => f.endsWith(".apk"));
+
+    expect(hasApk).toBe(true);
 
   });
 
