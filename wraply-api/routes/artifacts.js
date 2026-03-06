@@ -1,54 +1,94 @@
 const express = require("express")
-const fs = require("fs")
-const path = require("path")
-const pool = require("../db")
+
+const db = require("@wraply/shared/db")
+const artifactStorage =
+  require("@wraply/shared/storage/artifactStorage")
 
 const router = express.Router()
 
-const ARTIFACT_ROOT =
-  process.env.ARTIFACT_DIR || path.join(process.cwd(), "artifacts")
 
+router.get("/:jobId", async (req, res) => {
 
-// artifact list
-router.get("/:jobId", async (req,res)=>{
+  try {
 
-  const { jobId } = req.params
+    const { jobId } = req.params
 
-  const [rows] = await pool.query(`
-    SELECT
-      id,
-      file_name,
-      file_size,
-      file_type,
-      created_at
-    FROM artifacts
-    WHERE job_id=?
-    ORDER BY created_at DESC
-  `,[jobId])
+    const rows = await db.query(
+      "SELECT * FROM jobs WHERE job_id=?",
+      [jobId]
+    )
 
-  res.json({
-    jobId,
-    items: rows
-  })
+    const job = rows[0]
+
+    if (!job) {
+      return res.status(404).json({
+        error: "job not found"
+      })
+    }
+
+    const files =
+      await artifactStorage.list(jobId)
+
+    res.json({
+      jobId,
+      files
+    })
+
+  } catch (err) {
+
+    console.error(err)
+
+    res.status(500).json({
+      error: "artifact list failed"
+    })
+
+  }
 
 })
 
-// artifact download
+
 router.get("/:jobId/:file", async (req, res) => {
 
-  const { jobId, file } = req.params
+  try {
 
-  const filePath = path.join(
-    ARTIFACT_ROOT,
-    jobId,
-    file
-  )
+    const { jobId, file } = req.params
 
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: "artifact not found" })
+    const rows = await db.query(
+      "SELECT * FROM jobs WHERE job_id=?",
+      [jobId]
+    )
+
+    const job = rows[0]
+
+    if (!job) {
+      return res.status(404).json({
+        error: "job not found"
+      })
+    }
+
+    const stream =
+      await artifactStorage.getStream(
+        jobId,
+        file
+      )
+
+    if (!stream) {
+      return res.status(404).json({
+        error: "artifact not found"
+      })
+    }
+
+    stream.pipe(res)
+
+  } catch (err) {
+
+    console.error(err)
+
+    res.status(500).json({
+      error: "artifact download failed"
+    })
+
   }
-
-  res.download(filePath)
 
 })
 

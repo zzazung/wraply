@@ -1,24 +1,34 @@
 const { Queue } = require("bullmq");
 const IORedis = require("ioredis");
-
-require('dotenv').config();
+require("dotenv").config();
 
 const connection = new IORedis(
-  process.env.REDIS_URL || "redis://127.0.0.1:6379"
+  process.env.REDIS_URL || "redis://127.0.0.1:6379",
+  {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false
+  }
 );
 
 const buildQueue = new Queue("build-queue", {
-  connection
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    removeOnComplete: true,
+    removeOnFail: false,
+    backoff: {
+      type: "exponential",
+      delay: 5000
+    }
+  }
 });
 
 async function enqueueBuild(payload) {
-
   const job = await buildQueue.add(
     "build",
     payload,
     {
-      attempts: 2,
-      removeOnComplete: true,
+      jobId: `build-${Date.now()}`
     }
   );
 
