@@ -1,5 +1,6 @@
 packages:
-  - wraply-user
-  - wraply-admin
   - wraply-api
   - wraply-worker
+  - wraply-shared
+  - wraply-admin
+  - wraply-user

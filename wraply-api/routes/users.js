@@ -4,6 +4,8 @@ const sharp = require("sharp");
 
 const router = express.Router();
 
+const { STATES } = require("wraply-shared/job/jobState")
+
 /* --------------------------------------------------
    🔐 Mock Auth Middleware
 -------------------------------------------------- */
@@ -117,7 +119,8 @@ router.post("/projects/:projectId/builds", (req, res) => {
   const job = {
     job_id: jobId,
     platform,
-    status: "queued",
+    // status: "queued",
+    status: STATES.QUEUED,
     progress: 0,
     package_name: "mock.package",
     app_name: "MockApp",

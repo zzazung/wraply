@@ -12,6 +12,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@wraply/shared": "workspace:*",
+    "bcryptjs": "^3.0.3",
     "bullmq": "^5.70.1",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",

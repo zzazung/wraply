@@ -7,7 +7,14 @@ settings:
 importers:
 
   .:
+    dependencies:
+      mysql2:
+        specifier: ^3.18.2
+        version: 3.18.2(@types/node@20.19.35)
     devDependencies:
+      '@wraply/shared':
+        specifier: workspace:*
+        version: link:wraply-shared
       cross-env:
         specifier: ^10.1.0
         version: 10.1.0
@@ -60,6 +67,12 @@ importers:
 
   wraply-api:
     dependencies:
+      '@wraply/shared':
+        specifier: workspace:*
+        version: link:../wraply-shared
+      bcryptjs:
+        specifier: ^3.0.3
+        version: 3.0.3
       bullmq:
         specifier: ^5.70.1
         version: 5.70.1
@@ -96,6 +109,8 @@ importers:
       zod:
         specifier: ^4.3.6
         version: 4.3.6
+
+  wraply-shared: {}
 
   wraply-user:
     dependencies:
@@ -1264,6 +1279,10 @@ packages:
   baseline-browser-mapping@2.10.0:
     resolution: {integrity: sha512-lIyg0szRfYbiy67j9KN8IyeD7q7hcmqnJ1ddWmNt19ItGpNN64mnllmxUNFIOdOm6by97jlL6wfpTTJrmnjWAA==}
     engines: {node: '>=6.0.0'}
+    hasBin: true
+
+  bcryptjs@3.0.3:
+    resolution: {integrity: sha512-GlF5wPWnSa/X5LKM1o0wz0suXIINz1iHRLvTS+sLyi7XPbe5ycmYI3DlZqVGZZtDgl4DmasFg7gOB3JYbphV5g==}
     hasBin: true
 
   body-parser@2.2.2:
@@ -4574,6 +4593,8 @@ snapshots:
   balanced-match@4.0.4: {}
 
   baseline-browser-mapping@2.10.0: {}
+
+  bcryptjs@3.0.3: {}
 
   body-parser@2.2.2:
     dependencies:

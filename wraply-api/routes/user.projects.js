@@ -3,8 +3,7 @@ const express = require("express");
 const { v4: uuidv4 } = require("uuid");
 const { requireAuth } = require("../middleware/auth")
 const { enqueueBuild } = require("../queue/buildQueue");
-
-const pool = require("../db");
+const pool = require("@wraply/shared/db");
 
 const router = express.Router();
 

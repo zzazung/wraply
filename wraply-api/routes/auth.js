@@ -2,7 +2,8 @@ const express = require("express")
 const bcrypt = require("bcryptjs")
 const { v4: uuidv4 } = require("uuid")
 
-const pool = require("../db")
+// const pool = require("../db")
+const pool = require("@wraply/shared/db")
 const { signToken } = require("../lib/jwt")
 
 const router = express.Router()

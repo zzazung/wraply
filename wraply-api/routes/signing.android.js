@@ -3,7 +3,7 @@ const express = require("express");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
-const pool = require("../db");
+const pool = require("@wraply/shared/db");
 
 const {
   secureUploadDir,

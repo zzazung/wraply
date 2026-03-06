@@ -1,7 +1,28 @@
 // api/websocket.js
 const WebSocket = require("ws");
+const { query } = require("wraply-shared/db")
 
 const clients = new Map(); // ws -> jobId
+
+async function recoverJobs() {
+
+  await query(`
+    UPDATE jobs
+    SET status='failed'
+    WHERE status='running'
+  `);
+
+}
+
+async function start() {
+
+  await recoverJobs();
+
+  startConsumer();
+
+}
+
+start();
 
 function initWebSocket(server) {
   const wss = new WebSocket.Server({ server });

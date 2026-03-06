@@ -260,6 +260,20 @@ async function runBuild(job) {
 
   }
 
+  return new Promise((resolve, reject) => {
+
+    const child = exec(script, {
+      timeout: 30 * 60 * 1000
+    });
+
+    child.on("exit", code => {
+
+      if (code === 0) resolve()
+      else reject(new Error("build failed"))
+
+    });
+
+  });
 }
 
 module.exports = {

@@ -22,9 +22,13 @@
   },
   "homepage": "https://github.com/zzazung/wraply#readme",
   "devDependencies": {
+    "@wraply/shared": "workspace:*",
     "cross-env": "^10.1.0",
     "ioredis-mock": "^8.13.1",
     "jest": "^30.2.0",
     "supertest": "^7.2.2"
+  },
+  "dependencies": {
+    "mysql2": "^3.18.2"
   }
 }

@@ -1,3 +1,4 @@
+* API 구조
 wraply-api
  ├ server.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/server.js
  ├ bus
@@ -24,6 +25,7 @@ wraply-api
  └ websocket
      └ index.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/websocket/index.js
 
+* Worker 구조
 wraply-worker
  ├ worker.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-worker/worker.js
  ├ bus
@@ -41,7 +43,7 @@ wraply-worker
      ├ android
      └ ios
 
-* 테스트 코드
+* 테스트 코드 구조
 jest.config.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/jest.config.js
 scripts
  └ fake_build.sh https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/scripts/fake_build.sh

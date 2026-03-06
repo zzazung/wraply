@@ -1,33 +1,27 @@
 const Redis = require("ioredis");
+const EventEmitter = require("events");
 
-require('dotenv').config();
+const sub = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
 
-const redis = new Redis(process.env.REDIS_URL || "redis://127.0.0.1:6379");
+class LogBus extends EventEmitter {}
 
-function subscribeLogs(handler) {
+const logBus = new LogBus();
 
-  const sub = new Redis(process.env.REDIS_URL);
+sub.subscribe("wraply:logs");
+sub.subscribe("wraply:status");
 
-  sub.subscribe("wraply:logs");
+sub.on("message", (channel, message) => {
 
-  sub.on("message", (channel, message) => {
+  const event = JSON.parse(message);
 
-    if (channel !== "wraply:logs") return;
+  if (channel === "wraply:logs") {
+    logBus.emit("log", event);
+  }
 
-    try {
+  if (channel === "wraply:status") {
+    logBus.emit("status", event);
+  }
 
-      const data = JSON.parse(message);
+});
 
-      handler(data);
-
-    } catch (err) {
-      console.error("log parse error", err);
-    }
-
-  });
-
-}
-
-module.exports = {
-  subscribeLogs
-};
+module.exports = logBus;

@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 // const { broadcastLog, broadcastStatus } = require("../websocket");
-const db = require("../db");
+const pool = require("@wraply/shared/db");
 
 require('dotenv').config();
 
