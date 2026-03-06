@@ -4,10 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev:user": "pnpm --filter wraply-user dev",
     "dev:api": "pnpm --filter wraply-api start",
     "dev:worker": "pnpm --filter wraply-worker start",
-    "dev:admin": "pnpm --filter wraply-admin dev"
+    "dev:scheduler": "pnpm --filter wraply-scheduler start",
+    "dev:admin": "pnpm --filter wraply-admin dev",
+    "dev:user": "pnpm --filter wraply-user dev"
   },
   "repository": {
     "type": "git",

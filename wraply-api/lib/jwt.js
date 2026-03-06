@@ -1,24 +1,30 @@
-const jwt = require("jsonwebtoken")
+const jwt = require("jsonwebtoken");
 
-const SECRET = process.env.JWT_SECRET || "wraply-secret"
+const SECRET = process.env.JWT_SECRET || "wraply_secret";
 
-function signToken(user) {
+function signToken(payload) {
 
-  return jwt.sign(
-    { id: user.id, email: user.email },
-    SECRET,
-    { expiresIn: "7d" }
-  )
+  return jwt.sign(payload, SECRET, {
+    expiresIn: "7d"
+  });
 
 }
 
 function verifyToken(token) {
 
-  return jwt.verify(token, SECRET)
+  try {
+
+    return jwt.verify(token, SECRET);
+
+  } catch (err) {
+
+    return null;
+
+  }
 
 }
 
 module.exports = {
   signToken,
   verifyToken
-}
+};

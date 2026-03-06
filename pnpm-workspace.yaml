@@ -2,5 +2,6 @@ packages:
   - wraply-api
   - wraply-worker
   - wraply-shared
+  - wraply-scheduler
   - wraply-admin
   - wraply-user

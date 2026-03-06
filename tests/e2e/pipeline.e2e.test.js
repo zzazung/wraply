@@ -1,6 +1,7 @@
 const request = require("supertest")
 const express = require("express")
 
+const { signToken } = require("../../wraply-api/lib/jwt");
 const projectsRouter = require("../../wraply-api/routes/user.projects")
 const jobsRouter = require("../../wraply-api/routes/jobs")
 
@@ -28,6 +29,12 @@ describe("Full Pipeline", () => {
 
     const projectId = "test_project_" + Date.now()
 
+    const token = signToken({
+      userId: 1,
+      email: "test@test.com",
+      role: "user"
+    });
+
     await pool.query(`
       INSERT INTO projects (
         id,
@@ -46,6 +53,7 @@ describe("Full Pipeline", () => {
 
     const buildRes = await request(app)
       .post(`/user/projects/${projectId}/builds`)
+      .set("Authorization", `Bearer ${token}`)
       .send({ platform: "android" })
 
     expect(buildRes.statusCode).toBe(200)

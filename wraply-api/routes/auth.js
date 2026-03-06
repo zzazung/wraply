@@ -1,61 +1,99 @@
-const express = require("express")
-const bcrypt = require("bcryptjs")
-const { v4: uuidv4 } = require("uuid")
+const express = require("express");
+const router = express.Router();
 
-// const pool = require("../db")
-const pool = require("@wraply/shared/db")
-const { signToken } = require("../lib/jwt")
+const { query } = require("@wraply/shared/db");
+const { signToken } = require("../lib/jwt");
+const { hashPassword, verifyPassword } = require("../lib/crypto");
 
-const router = express.Router()
-
-router.post("/login", async (req, res) => {
-
-  const { email, password } = req.body
-
-  const [rows] = await pool.query(
-    "SELECT * FROM users WHERE email=?",
-    [email]
-  )
-
-  const user = rows[0]
-
-  if (!user) {
-    return res.status(401).json({ error: "Invalid credentials" })
-  }
-
-  const ok = await bcrypt.compare(password, user.password_hash)
-
-  if (!ok) {
-    return res.status(401).json({ error: "Invalid credentials" })
-  }
-
-  const token = signToken(user)
-
-  res.json({
-    token
-  })
-
-})
+/*
+회원가입
+*/
 
 router.post("/register", async (req, res) => {
 
-  const { email, password } = req.body
+  try {
 
-  const hash = await bcrypt.hash(password, 10)
+    const { email, password } = req.body;
 
-  const id = uuidv4()
+    const hash = await hashPassword(password);
 
-  await pool.query(
-    "INSERT INTO users (id,email,password_hash) VALUES (?,?,?)",
-    [id, email, hash]
-  )
+    const result = await query(`
+      INSERT INTO users (email, password_hash)
+      VALUES (?, ?)
+    `, [email, hash]);
 
-  const token = signToken({ id, email })
+    res.json({
+      id: result.insertId
+    });
 
-  res.json({
-    token
-  })
+  } catch (err) {
 
-})
+    console.error(err);
 
-module.exports = router
+    res.status(500).json({
+      error: "Register failed"
+    });
+
+  }
+
+});
+
+/*
+로그인
+*/
+
+router.post("/login", async (req, res) => {
+
+  try {
+
+    const { email, password } = req.body;
+
+    const rows = await query(`
+      SELECT *
+      FROM users
+      WHERE email = ?
+    `, [email]);
+
+    const user = rows[0];
+
+    if (!user) {
+
+      return res.status(401).json({
+        error: "Invalid credentials"
+      });
+
+    }
+
+    const valid = await verifyPassword(password, user.password_hash);
+
+    if (!valid) {
+
+      return res.status(401).json({
+        error: "Invalid credentials"
+      });
+
+    }
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      role: "user"
+    });
+
+    res.json({
+      token
+    });
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      error: "Login failed"
+    });
+
+  }
+
+});
+
+module.exports = router;
