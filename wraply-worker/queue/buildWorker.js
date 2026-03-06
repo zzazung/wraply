@@ -2,10 +2,41 @@ const path = require("path");
 const { spawn } = require("child_process");
 const fs = require("fs");
 
+const { v4: uuidv4 } = require("uuid")
 const db = require("../../wraply-api/db");
 const { publishLog, publishStatus } = require("../bus/logBus");
 
 require('dotenv').config();
+
+async function saveArtifact(jobId, filePath) {
+
+  const fs = require("fs")
+  const path = require("path")
+
+  const stat = fs.statSync(filePath)
+
+  const fileName = path.basename(filePath)
+
+  let type = "file"
+
+  if (fileName.endsWith(".apk")) type = "apk"
+  if (fileName.endsWith(".aab")) type = "aab"
+  if (fileName.endsWith(".ipa")) type = "ipa"
+
+  await pool.query(`
+    INSERT INTO artifacts
+    (id, job_id, file_name, file_size, file_type, file_path)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [
+    uuidv4(),
+    jobId,
+    fileName,
+    stat.size,
+    type,
+    filePath
+  ])
+
+}
 
 /**
  * artifact scan
@@ -27,6 +58,8 @@ async function scanArtifacts(jobId, artifactDir) {
     ) {
 
       const artifactPath = path.join(artifactDir, f);
+
+      await saveArtifact(jobId, artifactPath)
 
       await db.query(
         `

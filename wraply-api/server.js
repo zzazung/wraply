@@ -12,6 +12,8 @@ const jobsRouter = require("./routes/jobs");
 const internalRouter = require("./routes/internal");
 const androidSigningRouter = require("./routes/signing.android");
 const userProjectsRouter = require("./routes/user.projects");
+const artifactRoutes = require("./routes/artifacts");
+const installRoutes = require("./routes/install");
 
 // const CI_ROOT = process.env.CI_ROOT || process.cwd();
 const CI_ROOT = process.env.CI_ROOT || "/ci";
@@ -55,6 +57,8 @@ app.use("/jobs", jobsRouter);
 app.use("/internal", internalRouter);
 app.use("/android/signing", androidSigningRouter);
 app.use("/user", userProjectsRouter);
+app.use("/artifacts", artifactRoutes);
+app.use("/install", installRoutes);
 
 // app.get("/health", (_, res) => res.json({ ok: true }));
 

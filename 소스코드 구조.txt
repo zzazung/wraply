@@ -6,11 +6,16 @@ wraply-api
  │   └ index.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/db/index.js
  ├ lib
  │   ├ androidSigning.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/lib/androidSigning.js
- │   └ crypto.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/lib/crypto.js
+ │   ├ crypto.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/lib/crypto.js
+ │   └ jwt.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/lib/jwt.js
+ ├ middleware
+ │   └ auth.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/middleware/auth.js
  ├ queue
  │   └ buildQueue.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/queue/buildQueue.js
  ├ routes
+ │   ├ artifacts.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/routes/artifacts.js
  │   ├ auth.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/routes/auth.js
+ │   ├ install.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/routes/install.js
  │   ├ internal.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/routes/internal.js
  │   ├ jobs.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/routes/jobs.js
  │   ├ signing.android.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/wraply-api/routes/signing.android.js
@@ -36,6 +41,7 @@ wraply-worker
      ├ android
      └ ios
 
+* 테스트 코드
 jest.config.js https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/jest.config.js
 scripts
  └ fake_build.sh https://raw.githubusercontent.com/zzazung/wraply/refs/heads/main/scripts/fake_build.sh

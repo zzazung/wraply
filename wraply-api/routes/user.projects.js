@@ -1,18 +1,14 @@
 // api/routes/user.projects.js
 const express = require("express");
 const { v4: uuidv4 } = require("uuid");
+const { requireAuth } = require("../middleware/auth")
 const { enqueueBuild } = require("../queue/buildQueue");
+
 const pool = require("../db");
 
 const router = express.Router();
 
-// ✅ MVP 인증: dummy_token만 허용(나중에 JWT로 교체)
-function requireUser(req, res, next) {
-  const auth = req.header("authorization") || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (!token || token !== "dummy_token") return res.status(401).json({ error: "unauthorized" });
-  next();
-}
+router.use(requireAuth);
 
 // ✅ projects 목록
 router.get("/projects", requireUser, async (req, res) => {
