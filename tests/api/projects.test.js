@@ -1,17 +1,18 @@
 const request = require("supertest");
-
-const app = require("../../wraply-api/server");
-
-const { createTestToken } = require("../helpers/auth");
+const app = require("../../wraply-api/app");
 
 describe("Projects API", () => {
 
-  const token = createTestToken();
+  let token;
 
-  test("GET /user/projects", async () => {
+  beforeAll(() => {
+    token = "test-token";
+  });
+
+  test("GET /api/user/projects", async () => {
 
     const res = await request(app)
-      .get("/user/projects")
+      .get("/api/user/projects")
       .set("Authorization", `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);

@@ -1,13 +1,33 @@
 const { Queue } = require("bullmq");
-
-const Redis = require("ioredis-mock");
+const Redis = require("ioredis");
 
 describe("Build Queue", () => {
 
-  const connection = new Redis();
+  let redis;
+  let queue;
 
-  const queue = new Queue("wraply-build", {
-    connection
+  beforeAll(async () => {
+
+    redis = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: null
+    });
+
+    queue = new Queue("wraply-build", {
+      connection: redis
+    });
+
+  });
+
+  afterAll(async () => {
+
+    if (queue) {
+      await queue.close();
+    }
+
+    if (redis) {
+      await redis.quit();
+    }
+
   });
 
   test("enqueue job", async () => {

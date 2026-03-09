@@ -5,6 +5,8 @@ const { query } = require("@wraply/shared/db");
 const jobClients = new Map();
 
 let redisSub = null;
+let wss = null;
+let heartbeatInterval = null;
 
 
 /**
@@ -13,7 +15,10 @@ let redisSub = null;
 function broadcast(jobId, payload) {
 
   const clients = jobClients.get(jobId);
-  if (!clients) return;
+
+  if (!clients) {
+    return;
+  }
 
   const message = JSON.stringify(payload);
 
@@ -73,11 +78,15 @@ async function updateHeartbeat(jobId) {
  */
 function initRedisSubscriber() {
 
-  if (redisSub) return;
+  if (redisSub) {
+    return;
+  }
 
   redisSub = new Redis(
-    process.env.REDIS_URL ||
-    "redis://127.0.0.1:6379"
+    process.env.REDIS_URL || "redis://127.0.0.1:6379",
+    {
+      maxRetriesPerRequest: null
+    }
   );
 
   const channels = [
@@ -121,9 +130,9 @@ function initRedisSubscriber() {
 
     }
 
-    if (!data || !data.jobId)
+    if (!data || !data.jobId) {
       return;
-
+    }
 
     if (channel === "wraply:heartbeat") {
 
@@ -131,7 +140,6 @@ function initRedisSubscriber() {
       return;
 
     }
-
 
     if (channel === "wraply:logs") {
 
@@ -145,7 +153,6 @@ function initRedisSubscriber() {
       return;
 
     }
-
 
     if (channel === "wraply:status") {
 
@@ -171,20 +178,21 @@ function initRedisSubscriber() {
  */
 function startWebSocket(server) {
 
-  const wss = new WebSocket.Server({ server });
+  if (wss) {
+    return wss;
+  }
+
+  wss = new WebSocket.Server({ server });
 
   initRedisSubscriber();
-
 
   wss.on("connection", (ws, req) => {
 
     try {
 
-      const url =
-        new URL(req.url, "http://localhost");
+      const url = new URL(req.url, "http://localhost");
 
-      const jobId =
-        url.searchParams.get("jobId");
+      const jobId = url.searchParams.get("jobId");
 
       if (!jobId) {
 
@@ -203,20 +211,19 @@ function startWebSocket(server) {
 
       ws.isAlive = true;
 
-
       ws.on("pong", () => {
 
         ws.isAlive = true;
 
       });
 
-
       ws.on("close", () => {
 
-        const clients =
-          jobClients.get(jobId);
+        const clients = jobClients.get(jobId);
 
-        if (!clients) return;
+        if (!clients) {
+          return;
+        }
 
         clients.delete(ws);
 
@@ -228,15 +235,12 @@ function startWebSocket(server) {
 
       });
 
-
       ws.on("error", err => {
 
         console.error("ws error:", err);
 
         try {
-
           ws.close();
-
         } catch {}
 
       });
@@ -245,26 +249,25 @@ function startWebSocket(server) {
 
       console.error("WebSocket error:", err);
 
-      try { ws.close(); } catch {}
+      try {
+        ws.close();
+      } catch {}
 
     }
 
   });
 
-
   /**
-   * heartbeat
+   * heartbeat ping
    */
-  const interval = setInterval(() => {
+  heartbeatInterval = setInterval(() => {
 
     wss.clients.forEach(ws => {
 
       if (ws.isAlive === false) {
 
         try {
-
           ws.terminate();
-
         } catch {}
 
         return;
@@ -277,12 +280,10 @@ function startWebSocket(server) {
 
         ws.ping();
 
-      } catch (err) {
+      } catch {
 
         try {
-
           ws.terminate();
-
         } catch {}
 
       }
@@ -291,20 +292,78 @@ function startWebSocket(server) {
 
   }, 30000);
 
-
   wss.on("close", () => {
 
-    clearInterval(interval);
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+    }
 
   });
 
-
   console.log("WebSocket server started");
+
+  return wss;
 
 }
 
 
+/**
+ * graceful shutdown
+ */
+async function closeWebSocket() {
+
+  try {
+
+    if (redisSub) {
+
+      await redisSub.quit();
+      redisSub = null;
+
+    }
+
+  } catch (err) {
+
+    console.error("redis shutdown error:", err);
+
+  }
+
+  try {
+
+    if (heartbeatInterval) {
+
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+
+    }
+
+    if (wss) {
+
+      wss.clients.forEach(ws => {
+
+        try {
+          ws.close();
+        } catch {}
+
+      });
+
+      wss.close();
+
+      wss = null;
+
+    }
+
+  } catch (err) {
+
+    console.error("websocket shutdown error:", err);
+
+  }
+
+  jobClients.clear();
+
+}
+
 
 module.exports = {
-  startWebSocket
+  startWebSocket,
+  closeWebSocket
 };

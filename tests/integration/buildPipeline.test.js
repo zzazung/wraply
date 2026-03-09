@@ -1,36 +1,72 @@
-const { Queue, Worker } = require("bullmq");
-
+const { Queue, Worker, QueueEvents } = require("bullmq");
 const Redis = require("ioredis");
 
 describe("Build Pipeline", () => {
 
-  const connection = new Redis();
+  let redis;
+  let queue;
+  let worker;
+  let queueEvents;
 
-  const queue = new Queue("wraply-build", {
-    connection
+  beforeAll(async () => {
+
+    redis = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: null
+    });
+
+    queue = new Queue("wraply-build", {
+      connection: redis
+    });
+
+    queueEvents = new QueueEvents("wraply-build", {
+      connection: redis
+    });
+
+    await queueEvents.waitUntilReady();
+
+  });
+
+  afterAll(async () => {
+
+    if (worker) {
+      await worker.close();
+    }
+
+    if (queue) {
+      await queue.close();
+    }
+
+    if (queueEvents) {
+      await queueEvents.close();
+    }
+
+    if (redis) {
+      await redis.quit();
+    }
+
   });
 
   test("full pipeline", async () => {
 
-    const worker = new Worker(
+    worker = new Worker(
       "wraply-build",
       async job => {
-
         return { status: "finished" };
-
       },
-      { connection }
+      {
+        connection: redis
+      }
     );
 
+    worker.on("error", () => {});
+
     const job = await queue.add("build", {
-      jobId: "ci-pipeline-job"
+      jobId: "pipeline-test"
     });
 
-    const result = await job.waitUntilFinished(connection);
+    const result = await job.waitUntilFinished(queueEvents);
 
     expect(result.status).toBe("finished");
-
-    await worker.close();
 
   });
 

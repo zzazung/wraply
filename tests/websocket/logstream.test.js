@@ -2,7 +2,7 @@ const WebSocket = require("ws");
 const Redis = require("ioredis");
 const http = require("http");
 
-const { startWebSocket } =
+const { startWebSocket, closeWebSocket } =
   require("../../wraply-api/websocket");
 
 let server;
@@ -18,17 +18,23 @@ describe("WebSocket Log Streaming", () => {
 
     server.listen(4010, () => {
 
-      redis = new Redis();
+      redis = new Redis(process.env.REDIS_URL);
+
       done();
 
     });
 
   });
 
-  afterAll(done => {
+  afterAll(async () => {
 
-    redis.disconnect();
-    server.close(done);
+    if (redis) {
+      redis.disconnect();
+    }
+
+    await closeWebSocket();
+
+    await new Promise(resolve => server.close(resolve));
 
   });
 
@@ -52,6 +58,9 @@ describe("WebSocket Log Streaming", () => {
 
     ws.on("open", async () => {
 
+      /**
+       * Redis subscriber ready 보장
+       */
       await new Promise(r => setTimeout(r, 100));
 
       await redis.publish(
