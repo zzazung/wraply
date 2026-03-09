@@ -6,6 +6,7 @@ const jobClients = new Map();
 
 let redisSub = null;
 
+
 /**
  * broadcast
  */
@@ -16,15 +17,19 @@ function broadcast(jobId, payload) {
 
   const message = JSON.stringify(payload);
 
-  for (const ws of clients) {
+  for (const ws of [...clients]) {
 
     if (ws.readyState === WebSocket.OPEN) {
 
       try {
+
         ws.send(message);
+
       } catch (err) {
+
         console.error("ws send error:", err);
         clients.delete(ws);
+
       }
 
     } else {
@@ -36,6 +41,7 @@ function broadcast(jobId, payload) {
   }
 
 }
+
 
 /**
  * heartbeat update
@@ -61,6 +67,7 @@ async function updateHeartbeat(jobId) {
 
 }
 
+
 /**
  * Redis subscriber
  */
@@ -73,11 +80,31 @@ function initRedisSubscriber() {
     "redis://127.0.0.1:6379"
   );
 
-  redisSub.subscribe(
+  const channels = [
     "wraply:logs",
     "wraply:status",
     "wraply:heartbeat"
-  );
+  ];
+
+  redisSub.on("ready", () => {
+
+    console.log("Redis subscriber ready");
+
+    redisSub.subscribe(...channels);
+
+  });
+
+  redisSub.on("error", err => {
+
+    console.error("Redis subscriber error:", err);
+
+  });
+
+  redisSub.on("reconnecting", () => {
+
+    console.log("Redis reconnecting...");
+
+  });
 
   redisSub.on("message", async (channel, msg) => {
 
@@ -97,12 +124,14 @@ function initRedisSubscriber() {
     if (!data || !data.jobId)
       return;
 
+
     if (channel === "wraply:heartbeat") {
 
       await updateHeartbeat(data.jobId);
       return;
 
     }
+
 
     if (channel === "wraply:logs") {
 
@@ -117,6 +146,7 @@ function initRedisSubscriber() {
 
     }
 
+
     if (channel === "wraply:status") {
 
       broadcast(data.jobId, {
@@ -127,11 +157,14 @@ function initRedisSubscriber() {
         ts: Date.now()
       });
 
+      return;
+
     }
 
   });
 
 }
+
 
 /**
  * WebSocket server
@@ -141,6 +174,7 @@ function startWebSocket(server) {
   const wss = new WebSocket.Server({ server });
 
   initRedisSubscriber();
+
 
   wss.on("connection", (ws, req) => {
 
@@ -167,6 +201,16 @@ function startWebSocket(server) {
 
       jobClients.get(jobId).add(ws);
 
+      ws.isAlive = true;
+
+
+      ws.on("pong", () => {
+
+        ws.isAlive = true;
+
+      });
+
+
       ws.on("close", () => {
 
         const clients =
@@ -184,6 +228,19 @@ function startWebSocket(server) {
 
       });
 
+
+      ws.on("error", err => {
+
+        console.error("ws error:", err);
+
+        try {
+
+          ws.close();
+
+        } catch {}
+
+      });
+
     } catch (err) {
 
       console.error("WebSocket error:", err);
@@ -194,8 +251,60 @@ function startWebSocket(server) {
 
   });
 
+
+  /**
+   * heartbeat
+   */
+  const interval = setInterval(() => {
+
+    wss.clients.forEach(ws => {
+
+      if (ws.isAlive === false) {
+
+        try {
+
+          ws.terminate();
+
+        } catch {}
+
+        return;
+
+      }
+
+      ws.isAlive = false;
+
+      try {
+
+        ws.ping();
+
+      } catch (err) {
+
+        try {
+
+          ws.terminate();
+
+        } catch {}
+
+      }
+
+    });
+
+  }, 30000);
+
+
+  wss.on("close", () => {
+
+    clearInterval(interval);
+
+  });
+
+
   console.log("WebSocket server started");
 
 }
 
-module.exports = startWebSocket;
+
+
+module.exports = {
+  startWebSocket
+};

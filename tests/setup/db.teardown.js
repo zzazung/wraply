@@ -26,6 +26,7 @@ module.exports = async () => {
 
   console.log("Test DB teardown");
 
+  await db.query("DELETE FROM artifacts");
   await db.query("DELETE FROM jobs;");
 
   await db.pool.end();

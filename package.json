@@ -9,7 +9,7 @@
     "dev:scheduler": "pnpm --filter wraply-scheduler start",
     "dev:admin": "pnpm --filter wraply-admin dev",
     "dev:user": "pnpm --filter wraply-user dev",
-    "test": "jest --runInBand",
+    "test": "NODE_ENV=test jest --runInBand",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },

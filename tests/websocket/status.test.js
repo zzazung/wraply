@@ -8,7 +8,7 @@ const { startWebSocket } =
 let server;
 let redis;
 
-describe("WebSocket Log Streaming", () => {
+describe("WebSocket Status Streaming", () => {
 
   beforeAll(done => {
 
@@ -16,7 +16,7 @@ describe("WebSocket Log Streaming", () => {
 
     startWebSocket(server);
 
-    server.listen(4010, () => {
+    server.listen(4011, () => {
 
       redis = new Redis();
       done();
@@ -32,18 +32,19 @@ describe("WebSocket Log Streaming", () => {
 
   });
 
-  test("receive log stream", done => {
+  test("receive status update", done => {
 
     const ws =
-      new WebSocket("ws://localhost:4010?jobId=test_job");
+      new WebSocket("ws://localhost:4011?jobId=status_job");
 
     ws.on("message", data => {
 
       const msg = JSON.parse(data);
 
-      expect(msg.type).toBe("log");
-      expect(msg.jobId).toBe("test_job");
-      expect(msg.message).toBe("hello log");
+      expect(msg.type).toBe("status");
+      expect(msg.jobId).toBe("status_job");
+      expect(msg.status).toBe("building");
+      expect(msg.progress).toBe(50);
 
       ws.close();
       done();
@@ -55,10 +56,11 @@ describe("WebSocket Log Streaming", () => {
       await new Promise(r => setTimeout(r, 100));
 
       await redis.publish(
-        "wraply:logs",
+        "wraply:status",
         JSON.stringify({
-          jobId: "test_job",
-          message: "hello log"
+          jobId: "status_job",
+          status: "building",
+          progress: 50
         })
       );
 

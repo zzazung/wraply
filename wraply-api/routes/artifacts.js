@@ -10,7 +10,6 @@ const ARTIFACT_ROOT =
   process.env.ARTIFACT_DIR ||
   path.join(process.cwd(), "artifacts");
 
-
 /**
  * artifact list
  */
@@ -21,34 +20,46 @@ router.get("/:jobId", async (req, res) => {
     const { jobId } = req.params;
 
     const rows = await query(
-      "SELECT * FROM jobs WHERE job_id=?",
+      "SELECT job_id FROM jobs WHERE job_id=?",
       [jobId]
     );
 
-    const job = rows[0];
+    if (!rows.length) {
 
-    if (!job) {
       return res.status(404).json({
         error: "job not found"
       });
+
     }
 
     const dir =
       path.join(ARTIFACT_ROOT, jobId);
 
     if (!fs.existsSync(dir)) {
+
       return res.json({
+        jobId,
         items: []
       });
+
     }
 
     const files =
       fs.readdirSync(dir)
-        .filter(f => !f.includes(".."));
+        .filter(f =>
+          !f.includes("..") &&
+          !f.includes("/") &&
+          !f.includes("\\")
+        )
+        .map(name => ({
+          name,
+          downloadUrl:
+            `/artifacts/${jobId}/${name}`
+        }));
 
     res.json({
       jobId,
-      files
+      items: files
     });
 
   } catch (err) {
@@ -76,17 +87,16 @@ router.get("/:jobId/:file", async (req, res) => {
 
     const { jobId, file } = req.params;
 
-    /**
-     * filename sanitize
-     */
     if (
       file.includes("..") ||
       file.includes("/") ||
       file.includes("\\")
     ) {
+
       return res.status(400).json({
         error: "invalid filename"
       });
+
     }
 
     const rows = await query(
@@ -95,9 +105,11 @@ router.get("/:jobId/:file", async (req, res) => {
     );
 
     if (!rows.length) {
+
       return res.status(404).json({
         error: "job not found"
       });
+
     }
 
     const filePath =
@@ -107,43 +119,52 @@ router.get("/:jobId/:file", async (req, res) => {
         file
       );
 
-    const normalized =
-      path.normalize(filePath);
+    const resolved =
+      path.resolve(filePath);
 
-    if (
-      !normalized.startsWith(
-        path.join(ARTIFACT_ROOT, jobId)
-      )
-    ) {
+    const base =
+      path.resolve(
+        path.join(
+          ARTIFACT_ROOT,
+          jobId
+        )
+      );
+
+    if (!resolved.startsWith(base)) {
+
       return res.status(400).json({
         error: "invalid path"
       });
+
     }
 
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(resolved)) {
+
       return res.status(404).json({
         error: "artifact not found"
       });
+
     }
 
-    /**
-     * content type
-     */
     if (file.endsWith(".apk")) {
+
       res.setHeader(
         "Content-Type",
         "application/vnd.android.package-archive"
       );
+
     }
 
     if (file.endsWith(".ipa")) {
+
       res.setHeader(
         "Content-Type",
         "application/octet-stream"
       );
+
     }
 
-    res.download(filePath);
+    res.download(resolved);
 
   } catch (err) {
 

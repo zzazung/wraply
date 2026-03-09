@@ -3,23 +3,24 @@ const Redis = require("ioredis");
 
 describe("Worker Test", () => {
 
-  let connection;
+  let redis;
   let queue;
   let worker;
   let queueEvents;
 
   beforeAll(async () => {
 
-    connection = new Redis(process.env.REDIS_URL, {
-      maxRetriesPerRequest: null
+    redis = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false
     });
 
     queue = new Queue("wraply-build", {
-      connection
+      connection: redis
     });
 
     queueEvents = new QueueEvents("wraply-build", {
-      connection
+      connection: redis
     });
 
     await queueEvents.waitUntilReady();
@@ -40,13 +41,21 @@ describe("Worker Test", () => {
       await queueEvents.close();
     }
 
-    if (connection) {
-      await connection.quit();
+    if (redis) {
+      await redis.quit();
     }
 
   });
 
-  test("process job", async () => {
+  afterEach(async () => {
+
+    if (queue) {
+      await queue.drain();
+    }
+
+  });
+
+  test("worker processes job", async () => {
 
     worker = new Worker(
       "wraply-build",
@@ -54,7 +63,7 @@ describe("Worker Test", () => {
         return { status: "finished" };
       },
       {
-        connection
+        connection: redis
       }
     );
 

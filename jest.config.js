@@ -4,6 +4,10 @@ module.exports = {
 
   testTimeout: 30000,
 
+  detectOpenHandles: true,
+
+  forceExit: true,
+
   roots: [
     "<rootDir>/tests"
   ],
