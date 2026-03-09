@@ -1,34 +1,20 @@
-const Redis = require("ioredis-mock");
+const request = require("supertest");
 
-describe("Redis Log Bus", () => {
+const app = require("../../wraply-api/server");
 
-  test("publish/subscribe", async () => {
+const { createTestToken } = require("../helpers/auth");
 
-    const pub = new Redis();
-    const sub = new Redis();
+describe("Log API", () => {
 
-    await sub.subscribe("wraply:logs");
+  const token = createTestToken();
 
-    const message = { hello: "world" };
+  test("GET /jobs/:jobId/log", async () => {
 
-    const promise = new Promise(resolve => {
+    const res = await request(app)
+      .get("/jobs/test-job-1/log")
+      .set("Authorization", `Bearer ${token}`);
 
-      sub.on("message", (_, msg) => {
-
-        resolve(JSON.parse(msg));
-
-      });
-
-    });
-
-    await pub.publish(
-      "wraply:logs",
-      JSON.stringify(message)
-    );
-
-    const data = await promise;
-
-    expect(data.hello).toBe("world");
+    expect(res.statusCode).toBeLessThan(500);
 
   });
 

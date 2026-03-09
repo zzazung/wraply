@@ -1,5 +1,6 @@
 const { Queue, Worker } = require("bullmq");
-const Redis = require("ioredis-mock");
+
+const Redis = require("ioredis");
 
 describe("Build Pipeline", () => {
 
@@ -9,22 +10,20 @@ describe("Build Pipeline", () => {
     connection
   });
 
-  test("pipeline flow", async () => {
+  test("full pipeline", async () => {
 
     const worker = new Worker(
       "wraply-build",
       async job => {
 
-        return {
-          status: "finished"
-        };
+        return { status: "finished" };
 
       },
       { connection }
     );
 
     const job = await queue.add("build", {
-      jobId: "pipeline-test-1"
+      jobId: "ci-pipeline-job"
     });
 
     const result = await job.waitUntilFinished(connection);

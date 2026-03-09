@@ -4,9 +4,20 @@ const { spawn } = require("child_process");
 const { v4: uuidv4 } = require("uuid");
 
 const { query } = require("@wraply/shared/db");
-const { publishLog, publishStatus } = require("../bus/logBus");
 
-const BUILD_ROOT = process.env.WRAPLY_BUILD_ROOT || "/tmp/wraply-builds";
+const {
+  STATES,
+  getProgress,
+  isValidTransition
+} = require("@wraply/shared/job/jobState");
+
+const { publishLog, publishStatus } = require("../bus/logBus");
+const { registerBuild, unregisterBuild } = require("./buildRegistry");
+const { startHeartbeat, stopHeartbeat } = require("../bus/heartbeatBus");
+
+const BUILD_ROOT =
+  process.env.WRAPLY_BUILD_ROOT ||
+  "/tmp/wraply-builds";
 
 function ensureDir(dir) {
 
@@ -27,7 +38,6 @@ function cleanupWorkspace(dir) {
 async function saveArtifact(jobId, filePath) {
 
   const stat = fs.statSync(filePath);
-
   const fileName = path.basename(filePath);
 
   let type = "file";
@@ -41,15 +51,8 @@ async function saveArtifact(jobId, filePath) {
     INSERT INTO artifacts
     (id, job_id, file_name, file_size, file_type, file_path)
     VALUES (?, ?, ?, ?, ?, ?)
-    `,
-    [
-      uuidv4(),
-      jobId,
-      fileName,
-      stat.size,
-      type,
-      filePath
-    ]
+  `,
+    [uuidv4(), jobId, fileName, stat.size, type, filePath]
   );
 
 }
@@ -57,7 +60,6 @@ async function saveArtifact(jobId, filePath) {
 async function scanArtifacts(jobId, artifactDir) {
 
   if (!artifactDir) return;
-
   if (!fs.existsSync(artifactDir)) return;
 
   const files = fs.readdirSync(artifactDir);
@@ -70,15 +72,50 @@ async function scanArtifacts(jobId, artifactDir) {
       f.endsWith(".ipa")
     ) {
 
-      const artifactPath = path.join(artifactDir, f);
+      const artifactPath =
+        path.join(artifactDir, f);
 
       await saveArtifact(jobId, artifactPath);
 
-      await publishLog(jobId, `📦 artifact detected: ${f}`);
+      await publishLog(jobId, `artifact detected: ${f}`);
 
     }
 
   }
+
+}
+
+/**
+ * 상태 전이 적용
+ */
+async function transition(jobId, nextState) {
+
+  const rows = await query(
+    `SELECT status FROM jobs WHERE job_id=?`,
+    [jobId]
+  );
+
+  if (!rows || rows.length === 0) {
+    throw new Error("job not found");
+  }
+
+  const current = rows[0].status;
+
+  if (!isValidTransition(current, nextState)) {
+
+    await publishLog(
+      jobId,
+      `invalid state transition ${current} -> ${nextState}`
+    );
+
+    return;
+  }
+
+  await publishStatus(
+    jobId,
+    nextState,
+    getProgress(nextState)
+  );
 
 }
 
@@ -93,32 +130,64 @@ async function runBuild(job) {
     serviceUrl
   } = job;
 
-  const workspace = path.join(BUILD_ROOT, jobId);
+  const workspace =
+    path.join(BUILD_ROOT, jobId);
 
   ensureDir(workspace);
 
   try {
 
-    await publishStatus(jobId, "running", 5);
+    await transition(jobId, STATES.PREPARING);
 
-    const workerRoot = process.env.WORKER_ROOT || process.cwd();
+    const heartbeatTimer = startHeartbeat(jobId);
 
-    const scriptsDir = path.join(workerRoot, "scripts");
+    const workerRoot =
+      process.env.WORKER_ROOT ||
+      process.cwd();
+
+    const scriptsDir =
+      path.join(workerRoot, "scripts");
 
     let script;
 
     if (platform === "android") {
-      script = path.join(scriptsDir, "build_android_fastlane.sh");
+
+      script =
+        path.join(
+          scriptsDir,
+          "build_android_fastlane.sh"
+        );
+
     }
 
     if (platform === "ios") {
-      script = path.join(scriptsDir, "build_ios_fastlane.sh");
+
+      script =
+        path.join(
+          scriptsDir,
+          "build_ios_fastlane.sh"
+        );
+
     }
+
+    if (!script || !fs.existsSync(script)) {
+
+      throw new Error(
+        `build script not found for platform: ${platform}`
+      );
+
+    }
+
+    await transition(jobId, STATES.PATCHING);
 
     await publishLog(jobId, `workspace: ${workspace}`);
 
+    await transition(jobId, STATES.BUILDING);
+
     const proc = spawn(
+
       "bash",
+
       [
         script,
         safeName,
@@ -126,15 +195,19 @@ async function runBuild(job) {
         appName,
         serviceUrl
       ],
+
       {
         cwd: workspace,
         env: process.env
       }
+
     );
+
+    registerBuild(jobId, proc);
 
     let artifactDir = null;
 
-    proc.stdout.on("data", async (data) => {
+    proc.stdout.on("data", async data => {
 
       const text = data.toString();
 
@@ -142,11 +215,29 @@ async function runBuild(job) {
 
       if (text.includes("OUTPUT_DIR=")) {
 
-        const parts = text.trim().split("OUTPUT_DIR=");
+        const parts =
+          text.trim().split("OUTPUT_DIR=");
 
         if (parts.length > 1) {
 
-          artifactDir = path.join(workspace, parts[1].trim());
+          const candidate =
+            path.resolve(
+              workspace,
+              parts[1].trim()
+            );
+
+          if (candidate.startsWith(workspace)) {
+
+            artifactDir = candidate;
+
+          } else {
+
+            await publishLog(
+              jobId,
+              "invalid artifact path ignored"
+            );
+
+          }
 
         }
 
@@ -154,55 +245,59 @@ async function runBuild(job) {
 
     });
 
-    proc.stderr.on("data", async (data) => {
+    proc.stderr.on("data", async data => {
 
       await publishLog(jobId, data.toString());
 
     });
 
-    const timeout = setTimeout(() => {
+    proc.on("error", async err => {
+
+      await publishLog(jobId, `spawn error: ${err.message}`);
+
+      await transition(jobId, STATES.FAILED);
+
+      stopHeartbeat(heartbeatTimer);
+
+      cleanupWorkspace(workspace);
+
+    });
+
+    const timeout = setTimeout(async () => {
+
+      await publishLog(jobId, "build timeout");
 
       proc.kill("SIGKILL");
 
+      await transition(jobId, STATES.FAILED);
+
+      stopHeartbeat(heartbeatTimer);
+
     }, 30 * 60 * 1000);
 
-    proc.on("close", async (code) => {
+    proc.on("close", async code => {
 
       clearTimeout(timeout);
 
+      unregisterBuild(jobId);
+
       if (code === 0) {
 
-        await publishStatus(jobId, "success", 100);
+        await transition(jobId, STATES.SIGNING);
 
-        await query(
-          `
-          UPDATE jobs
-          SET status='success',
-              progress=100,
-              finished_at=NOW()
-          WHERE job_id=?
-          `,
-          [jobId]
-        );
+        await transition(jobId, STATES.UPLOADING);
 
         await scanArtifacts(jobId, artifactDir);
 
+        await transition(jobId, STATES.FINISHED);
+
       } else {
 
-        await publishStatus(jobId, "failed", 100);
-
-        await query(
-          `
-          UPDATE jobs
-          SET status='failed',
-              progress=100,
-              finished_at=NOW()
-          WHERE job_id=?
-          `,
-          [jobId]
-        );
+        await transition(jobId, STATES.FAILED);
 
       }
+
+      stopHeartbeat(heartbeatTimer);
 
       cleanupWorkspace(workspace);
 
@@ -212,12 +307,14 @@ async function runBuild(job) {
 
     await publishLog(jobId, err.message);
 
+    await transition(jobId, STATES.FAILED);
+
+    stopHeartbeat(heartbeatTimer);
+
     cleanupWorkspace(workspace);
 
   }
 
 }
 
-module.exports = {
-  runBuild
-};
+module.exports = { runBuild };

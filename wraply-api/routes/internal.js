@@ -5,41 +5,98 @@ const { query } = require("@wraply/shared/db");
 
 router.post("/job/update", requireWorker, async (req, res) => {
   try {
+
     const { jobId, status } = req.body;
 
+    /**
+     * 기본 validation
+     */
     if (!jobId || !status) {
       return res.status(400).json({
         error: "jobId and status required"
       });
     }
 
-    const allowed = ["queued", "building", "success", "failed"];
+    if (typeof jobId !== "string") {
+      return res.status(400).json({
+        error: "invalid jobId"
+      });
+    }
 
-    if (!allowed.includes(status)) {
+    if (typeof status !== "string") {
       return res.status(400).json({
         error: "invalid status"
       });
     }
 
-    await query(
+    const allowed = [
+      "queued",
+      "building",
+      "success",
+      "failed"
+    ];
+
+    if (!allowed.includes(status)) {
+
+      console.warn(
+        "Worker invalid status:",
+        jobId,
+        status
+      );
+
+      return res.status(400).json({
+        error: "invalid status"
+      });
+    }
+
+    /**
+     * job status update
+     */
+    const result = await query(
       `UPDATE jobs
        SET status = ?, updated_at = NOW()
-       WHERE id = ?`,
+       WHERE job_id = ?`,
       [status, jobId]
     );
 
-    console.log("Worker update:", jobId, status);
+    /**
+     * update 결과 검증
+     */
+    if (!result || result.affectedRows === 0) {
+
+      console.warn(
+        "Worker update skipped (job not found):",
+        jobId
+      );
+
+      return res.status(404).json({
+        error: "job not found"
+      });
+
+    }
+
+    console.log(
+      "Worker update:",
+      jobId,
+      "→",
+      status
+    );
 
     res.json({
       success: true
     });
 
   } catch (err) {
-    console.error("internal update error", err);
+
+    console.error(
+      "internal update error",
+      err
+    );
 
     res.status(500).json({
       error: "internal error"
     });
+
   }
 });
 

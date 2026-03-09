@@ -1,10 +1,21 @@
 const { Queue } = require("bullmq");
 const IORedis = require("ioredis");
 
-const connection = new IORedis(process.env.REDIS_URL || "redis://localhost:6379");
+const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+const QUEUE_NAME = "wraply-build";
+
+const connection = new IORedis(REDIS_URL);
+
+connection.on("error", err => {
+  console.error("[buildQueue] redis error", err);
+});
+
+connection.on("connect", () => {
+  console.log("[buildQueue] redis connected");
+});
 
 const buildQueue = new Queue(
-  "wraply-build",
+  QUEUE_NAME,
   {
     connection,
     defaultJobOptions: {
@@ -15,6 +26,10 @@ const buildQueue = new Queue(
 );
 
 async function enqueueBuild(payload) {
+
+  if (!payload || !payload.jobId) {
+    throw new Error("enqueueBuild requires payload.jobId");
+  }
 
   const jobId = payload.jobId;
 

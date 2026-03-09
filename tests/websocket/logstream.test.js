@@ -2,7 +2,7 @@ const http = require("http")
 const WebSocket = require("ws")
 
 const {
-  initWebSocket,
+  startWebSocket,
   broadcastLog
 } = require("../../wraply-api/websocket")
 
@@ -14,7 +14,7 @@ describe("Log Streaming", () => {
 
     server = http.createServer()
 
-    initWebSocket(server)
+    startWebSocket(server)
 
     server.listen(4010, done)
 

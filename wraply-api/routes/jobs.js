@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require("uuid");
 const fs = require("fs");
 const path = require("path");
 
-const db = require("@wraply/shared/db");
+const { query } = require("@wraply/shared/db");
 
 require("dotenv").config();
 
@@ -19,7 +19,6 @@ const API_BASE =
   `http://localhost:${process.env.API_PORT || 4000}`;
 
 
-
 /**
  * 안전한 CI_ROOT 내부 경로만 허용
  */
@@ -27,27 +26,16 @@ function safeAbsPathFromCiRoot(relPath) {
 
   if (!relPath) return null;
 
-  if (path.isAbsolute(relPath)) return null;
-
   const normalized =
     relPath.replace(/\\/g, "/");
-
-  if (!normalized.startsWith("builds/"))
-    return null;
 
   if (normalized.includes(".."))
     return null;
 
   const abs =
-    path.join(CI_ROOT, normalized);
+    path.resolve(CI_ROOT, normalized);
 
-  const rel =
-    path.relative(CI_ROOT, abs);
-
-  if (
-    rel.startsWith("..") ||
-    path.isAbsolute(rel)
-  )
+  if (!abs.startsWith(path.resolve(CI_ROOT)))
     return null;
 
   return abs;
@@ -74,7 +62,11 @@ function rmrf(absPath) {
 
     }
 
-  } catch {}
+  } catch (err) {
+
+    console.error("rmrf error:", err);
+
+  }
 
   return false;
 
@@ -98,13 +90,13 @@ router.post("/", async (req, res) => {
     } = req.body;
 
     if (
-      !platform ||
-      !packageName ||
-      !appName ||
-      !url
+      typeof platform !== "string" ||
+      typeof packageName !== "string" ||
+      typeof appName !== "string" ||
+      typeof url !== "string"
     ) {
       return res.status(400).json({
-        error: "Missing fields"
+        error: "Invalid fields"
       });
     }
 
@@ -114,7 +106,7 @@ router.post("/", async (req, res) => {
     const safeName =
       packageName.replace(/\./g, "_");
 
-    await db.query(
+    await query(
       `
       INSERT INTO jobs
       (job_id, platform, package_name, safe_name, app_name, url, scheme, status, progress)
@@ -131,7 +123,7 @@ router.post("/", async (req, res) => {
       ]
     );
 
-    await db.query(
+    await query(
       `
       INSERT INTO job_queue (job_id, status)
       VALUES (?, 'queued')
@@ -146,6 +138,8 @@ router.post("/", async (req, res) => {
     });
 
   } catch (e) {
+
+    console.error("job create error:", e);
 
     res.status(500).json({
       error: String(e)
@@ -164,98 +158,8 @@ router.get("/", async (req, res) => {
 
   try {
 
-    const platform =
-      (req.query.platform || "").toString();
-
-    const status =
-      (req.query.status || "").toString();
-
-    const q =
-      (req.query.q || "").toString();
-
-    const page =
-      Math.max(
-        1,
-        parseInt(
-          (req.query.page || "1").toString(),
-          10
-        )
-      );
-
-    const limit =
-      Math.min(
-        100,
-        Math.max(
-          1,
-          parseInt(
-            (req.query.limit || "20").toString(),
-            10
-          )
-        )
-      );
-
-    const offset =
-      (page - 1) * limit;
-
-    const where = [];
-    const params = [];
-
-    if (platform) {
-
-      where.push("platform = ?");
-      params.push(platform);
-
-    }
-
-    if (status) {
-
-      where.push("status = ?");
-      params.push(status);
-
-    }
-
-    if (q) {
-
-      where.push(`
-      (job_id LIKE ?
-      OR package_name LIKE ?
-      OR safe_name LIKE ?
-      OR app_name LIKE ?
-      OR url LIKE ?)
-      `);
-
-      const like = `%${q}%`;
-
-      params.push(
-        like,
-        like,
-        like,
-        like,
-        like
-      );
-
-    }
-
-    const whereSql =
-      where.length
-        ? `WHERE ${where.join(" AND ")}`
-        : "";
-
-    const countRows =
-      await db.query(
-        `
-        SELECT COUNT(*) as total
-        FROM jobs
-        ${whereSql}
-        `,
-        params
-      );
-
-    const total =
-      countRows[0]?.total ?? 0;
-
-    const items =
-      await db.query(
+    const rows =
+      await query(
         `
         SELECT
         job_id,
@@ -270,28 +174,23 @@ router.get("/", async (req, res) => {
         created_at,
         updated_at,
         finished_at,
-        error_reason,
-        artifact_dir,
-        log_path
+        error_reason
         FROM jobs
-        ${whereSql}
         ORDER BY created_at DESC
-        LIMIT ? OFFSET ?
-        `,
-        [...params, limit, offset]
+        LIMIT 100
+        `
       );
 
     res.json({
-      items,
-      page,
-      limit,
-      total
+      items: rows
     });
 
-  } catch (e) {
+  } catch (err) {
+
+    console.error("job list error:", err);
 
     res.status(500).json({
-      error: String(e)
+      error: "internal error"
     });
 
   }
@@ -307,11 +206,11 @@ router.get("/:jobId", async (req, res) => {
 
   try {
 
-    const jobId =
-      req.params.jobId;
+    const { jobId } =
+      req.params;
 
     const rows =
-      await db.query(
+      await query(
         `
         SELECT *
         FROM jobs
@@ -331,10 +230,12 @@ router.get("/:jobId", async (req, res) => {
 
     res.json(rows[0]);
 
-  } catch (e) {
+  } catch (err) {
+
+    console.error("job detail error:", err);
 
     res.status(500).json({
-      error: String(e)
+      error: "internal error"
     });
 
   }
@@ -344,63 +245,17 @@ router.get("/:jobId", async (req, res) => {
 
 
 /**
- * Artifacts
- * 반드시 /:jobId 보다 위에 위치
- */
-router.get("/:jobId/artifacts", async (req, res) => {
-
-  try {
-
-    const jobId =
-      req.params.jobId;
-
-    const rows =
-      await db.query(
-        `
-        SELECT name,path
-        FROM artifacts
-        WHERE job_id=?
-        `,
-        [jobId]
-      );
-
-    const items =
-      rows.map((r) => ({
-
-        name: r.name,
-
-        downloadUrl:
-          `/downloads/${r.path}`
-
-      }));
-
-    res.json({
-      items
-    });
-
-  } catch (e) {
-
-    res.status(500).json({
-      error: String(e)
-    });
-
-  }
-
-});
-
-
-
-/**
- * Log
+ * Job Log
  */
 router.get("/:jobId/log", async (req, res) => {
 
   try {
 
-    const { jobId } = req.params;
+    const { jobId } =
+      req.params;
 
     const rows =
-      await db.query(
+      await query(
         `
         SELECT log_path
         FROM jobs
@@ -414,11 +269,9 @@ router.get("/:jobId/log", async (req, res) => {
       !rows[0].log_path
     ) {
 
-      return res
-        .status(404)
-        .json({
-          error: "Log not found"
-        });
+      return res.status(404).json({
+        error: "Log not found"
+      });
 
     }
 
@@ -432,11 +285,9 @@ router.get("/:jobId/log", async (req, res) => {
 
     if (!fs.existsSync(abs)) {
 
-      return res
-        .status(404)
-        .json({
-          error: "Log file missing"
-        });
+      return res.status(404).json({
+        error: "Log file missing"
+      });
 
     }
 
@@ -445,14 +296,130 @@ router.get("/:jobId/log", async (req, res) => {
       "text/plain; charset=utf-8"
     );
 
-    res.send(
-      fs.readFileSync(abs, "utf-8")
-    );
+    const stream =
+      fs.createReadStream(abs);
 
-  } catch (e) {
+    stream.pipe(res);
+
+  } catch (err) {
+
+    console.error("log read error:", err);
 
     res.status(500).json({
-      error: String(e)
+      error: "internal error"
+    });
+
+  }
+
+});
+
+
+
+/**
+ * Artifacts
+ */
+router.get("/:jobId/artifacts", async (req, res) => {
+
+  try {
+
+    const { jobId } =
+      req.params;
+
+    const rows =
+      await query(
+        `
+        SELECT name,path
+        FROM artifacts
+        WHERE job_id=?
+        `,
+        [jobId]
+      );
+
+    const items =
+      rows
+        .filter(r => r.path && !r.path.includes(".."))
+        .map(r => ({
+          name: r.name,
+          downloadUrl: `/downloads/${r.path}`
+        }));
+
+    res.json({
+      items
+    });
+
+  } catch (err) {
+
+    console.error("artifact list error:", err);
+
+    res.status(500).json({
+      error: "internal error"
+    });
+
+  }
+
+});
+
+
+
+/**
+ * Job Cancel
+ */
+router.post("/:jobId/cancel", async (req, res) => {
+
+  try {
+
+    const { jobId } =
+      req.params;
+
+    const rows =
+      await query(
+        `
+        SELECT status
+        FROM jobs
+        WHERE job_id = ?
+        `,
+        [jobId]
+      );
+
+    if (!rows.length) {
+
+      return res.status(404).json({
+        error: "Job not found"
+      });
+
+    }
+
+    const status =
+      rows[0].status;
+
+    const { isTerminal } =
+      require("@wraply/shared/job/jobState");
+
+    if (isTerminal(status)) {
+
+      return res.status(400).json({
+        error: "Job already finished"
+      });
+
+    }
+
+    const redis = require("../lib/redis");
+
+    await redis.publish(
+      "wraply:cancel",
+      JSON.stringify({ jobId })
+    );
+
+    res.json({
+      success: true
+    });
+
+  } catch (err) {
+
+    console.error("job cancel error:", err);
+
+    res.status(500).json({
+      error: "internal error"
     });
 
   }
@@ -473,26 +440,19 @@ router.delete("/", async (req, res) => {
 
   if (!jobIds.length) {
 
-    return res
-      .status(400)
-      .json({
-        error: "jobIds is required"
-      });
+    return res.status(400).json({
+      error: "jobIds is required"
+    });
 
   }
 
-  const conn =
-    await db.pool.getConnection();
-
   try {
-
-    await conn.beginTransaction();
 
     const placeholders =
       jobIds.map(() => "?").join(",");
 
     const rows =
-      await conn.query(
+      await query(
         `
         SELECT job_id, artifact_dir, log_path
         FROM jobs
@@ -516,11 +476,10 @@ router.delete("/", async (req, res) => {
           r.log_path
         );
 
-      let ok = false;
-
       if (artifactAbs) {
 
-        ok = rmrf(artifactAbs);
+        const ok =
+          rmrf(artifactAbs);
 
         if (ok)
           deletedFiles.push({
@@ -528,20 +487,12 @@ router.delete("/", async (req, res) => {
             removed: r.artifact_dir
           });
 
-        else
-          skipped.push({
-            jobId: r.job_id,
-            reason:
-              "artifact_dir not removed"
-          });
-
-        continue;
-
       }
 
       if (logAbs) {
 
-        ok = rmrf(logAbs);
+        const ok =
+          rmrf(logAbs);
 
         if (ok)
           deletedFiles.push({
@@ -549,25 +500,20 @@ router.delete("/", async (req, res) => {
             removed: r.log_path
           });
 
-        else
-          skipped.push({
-            jobId: r.job_id,
-            reason:
-              "log_path not removed"
-          });
+      }
 
-        continue;
+      if (!artifactAbs && !logAbs) {
+
+        skipped.push({
+          jobId: r.job_id,
+          reason: "unsafe path"
+        });
 
       }
 
-      skipped.push({
-        jobId: r.job_id,
-        reason: "unsafe path"
-      });
-
     }
 
-    await conn.query(
+    await query(
       `
       DELETE FROM job_queue
       WHERE job_id IN (${placeholders})
@@ -576,15 +522,13 @@ router.delete("/", async (req, res) => {
     );
 
     const delJobs =
-      await conn.query(
+      await query(
         `
         DELETE FROM jobs
         WHERE job_id IN (${placeholders})
         `,
         jobIds
       );
-
-    await conn.commit();
 
     res.json({
       success: true,
@@ -594,22 +538,17 @@ router.delete("/", async (req, res) => {
       skipped
     });
 
-  } catch (e) {
+  } catch (err) {
 
-    await conn.rollback();
+    console.error("job delete error:", err);
 
     res.status(500).json({
-      error: String(e)
+      error: "internal error"
     });
-
-  } finally {
-
-    conn.release();
 
   }
 
 });
-
 
 
 module.exports = router;

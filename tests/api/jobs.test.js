@@ -1,21 +1,45 @@
-const request = require("supertest")
-const express = require("express")
+const request = require("supertest");
+const jwt = require("jsonwebtoken");
 
-const jobsRouter = require("../../wraply-api/routes/jobs")
+const app = require("../../wraply-api/server");
 
-const app = express()
-
-app.use(express.json())
-app.use("/", jobsRouter)
+const db = require("@wraply/shared/db");
 
 describe("Jobs API", () => {
 
-  test("GET job", async () => {
+  const token = jwt.sign(
+    { userId: 1, role: "admin" },
+    process.env.JWT_SECRET
+  );
+
+  const jobId = "test-job-1";
+
+  beforeAll(async () => {
+
+    await db.query(
+      "INSERT INTO jobs (id, status) VALUES (?, ?);",
+      [jobId, "queued"]
+    );
+
+  });
+
+  afterAll(async () => {
+
+    await db.query(
+      "DELETE FROM jobs WHERE id=?;",
+      [jobId]
+    );
+
+  });
+
+  test("GET /jobs/:jobId", async () => {
 
     const res = await request(app)
-      .get("/jobs/test");
+      .get(`/jobs/${jobId}`)
+      .set("Authorization", `Bearer ${token}`);
 
-    expect(res.statusCode).toBeLessThan(500);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.jobId).toBe(jobId);
 
   });
 

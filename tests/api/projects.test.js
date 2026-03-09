@@ -1,23 +1,22 @@
 const request = require("supertest");
+
 const app = require("../../wraply-api/server");
 
-const { signToken } = require("../../wraply-api/lib/jwt");
+const { createTestToken } = require("../helpers/auth");
 
 describe("Projects API", () => {
 
-  const token = signToken({
-    userId: 1,
-    email: "test@test.com",
-    role: "user"
-  });
+  const token = createTestToken();
 
-  test("list projects", async () => {
+  test("GET /user/projects", async () => {
 
     const res = await request(app)
       .get("/user/projects")
       .set("Authorization", `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
+
+    expect(Array.isArray(res.body)).toBe(true);
 
   });
 

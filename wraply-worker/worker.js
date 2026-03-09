@@ -1,81 +1,54 @@
-// api/websocket.js
-const WebSocket = require("ws");
-const { query } = require("wraply-shared/db")
+require("dotenv").config();
 
-const clients = new Map(); // ws -> jobId
+const Redis = require("ioredis");
+const { recoverJobs } = require("@wraply/shared/job/jobRecovery");
+const { startCancelListener } = require("./bus/cancelBus");
 
-async function recoverJobs() {
-
-  await query(`
-    UPDATE jobs
-    SET status='failed'
-    WHERE status='running'
-  `);
-
-}
+const redis = new Redis(process.env.REDIS_URL);
 
 async function start() {
+  try {
+    console.log("[wraply-worker] starting worker");
 
-  await recoverJobs();
+    // recover jobs that were left in building state
+    await recoverJobs();
 
-  startConsumer();
+    console.log("[wraply-worker] job recovery completed");
 
+    // start queue consumer
+    require("./queue/buildConsumer");
+
+    console.log("[wraply-worker] build consumer started");
+
+    await startCancelListener();
+  } catch (err) {
+    console.error("[wraply-worker] startup error", err);
+    process.exit(1);
+  }
 }
+
+async function shutdown() {
+  try {
+    console.log("[wraply-worker] shutting down");
+
+    await redis.quit();
+
+    process.exit(0);
+  } catch (err) {
+    console.error("[wraply-worker] shutdown error", err);
+    process.exit(1);
+  }
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
+process.on("uncaughtException", err => {
+  console.error("[wraply-worker] uncaughtException", err);
+});
+
+process.on("unhandledRejection", err => {
+  console.error("[wraply-worker] unhandledRejection", err);
+});
 
 start();
-
-function initWebSocket(server) {
-  const wss = new WebSocket.Server({ server });
-
-  wss.on("connection", (ws, req) => {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const jobId = url.searchParams.get("jobId");
-
-    if (!jobId) {
-      ws.close();
-      return;
-    }
-
-    clients.set(ws, jobId);
-
-    // ✅ 연결 이벤트는 build status와 분리
-    try {
-      ws.send(JSON.stringify({ type: "ws", status: "connected" }));
-    } catch {}
-
-    ws.on("close", () => {
-      clients.delete(ws);
-    });
-  });
-
-  return wss;
-}
-
-function broadcastLog(jobId, message) {
-  for (const [ws, clientJobId] of clients.entries()) {
-    if (clientJobId === jobId && ws.readyState === WebSocket.OPEN) {
-      try {
-        ws.send(JSON.stringify({
-          type: "log",
-          data: String(message),
-        }));
-      } catch {}
-    }
-  }
-}
-
-function broadcastStatus(jobId, payload) {
-  for (const [ws, clientJobId] of clients.entries()) {
-    if (clientJobId === jobId && ws.readyState === WebSocket.OPEN) {
-      try {
-        ws.send(JSON.stringify({
-          type: "status",
-          status: payload.status,
-          progress: payload.progress,
-        }));
-      } catch {}
-    }
-  }
-}
-
-module.exports = { initWebSocket, broadcastLog, broadcastStatus };

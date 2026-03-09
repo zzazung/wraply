@@ -1,16 +1,14 @@
 const express = require("express");
+const fs = require("fs");
+const path = require("path");
 
-const db = require("@wraply/shared/db");
-const artifactStorage =
-  require("@wraply/shared/storage/artifactStorage");
-
-const {
-  createSignedToken,
-  verifySignedToken
-} = require("@wraply/shared/security/signedUrl");
+const { query } = require("@wraply/shared/db");
 
 const router = express.Router();
 
+const ARTIFACT_ROOT =
+  process.env.ARTIFACT_DIR ||
+  path.join(process.cwd(), "artifacts");
 
 
 /**
@@ -22,7 +20,7 @@ router.get("/:jobId", async (req, res) => {
 
     const { jobId } = req.params;
 
-    const rows = await db.query(
+    const rows = await query(
       "SELECT * FROM jobs WHERE job_id=?",
       [jobId]
     );
@@ -35,37 +33,33 @@ router.get("/:jobId", async (req, res) => {
       });
     }
 
+    const dir =
+      path.join(ARTIFACT_ROOT, jobId);
+
+    if (!fs.existsSync(dir)) {
+      return res.json({
+        items: []
+      });
+    }
+
     const files =
-      await artifactStorage.list(jobId);
-
-    const items = files.map(file => {
-
-      const token =
-        createSignedToken({
-          jobId,
-          file,
-          ttl: 600000
-        });
-
-      return {
-        file,
-        download:
-          `/artifacts/download?token=${token}`
-      };
-
-    });
+      fs.readdirSync(dir)
+        .filter(f => !f.includes(".."));
 
     res.json({
       jobId,
-      items
+      files
     });
 
   } catch (err) {
 
-    console.error(err);
+    console.error(
+      "artifact list error:",
+      err
+    );
 
     res.status(500).json({
-      error: "artifact list failed"
+      error: "internal error"
     });
 
   }
@@ -73,56 +67,93 @@ router.get("/:jobId", async (req, res) => {
 });
 
 
-
 /**
- * artifact download (signed)
+ * artifact download
  */
-router.get("/download", async (req, res) => {
+router.get("/:jobId/:file", async (req, res) => {
 
   try {
 
-    const { token } = req.query;
+    const { jobId, file } = req.params;
 
-    if (!token) {
+    /**
+     * filename sanitize
+     */
+    if (
+      file.includes("..") ||
+      file.includes("/") ||
+      file.includes("\\")
+    ) {
       return res.status(400).json({
-        error: "token required"
+        error: "invalid filename"
       });
     }
 
-    const payload =
-      verifySignedToken(token);
+    const rows = await query(
+      "SELECT job_id FROM jobs WHERE job_id=?",
+      [jobId]
+    );
 
-    if (!payload) {
-      return res.status(403).json({
-        error: "invalid token"
+    if (!rows.length) {
+      return res.status(404).json({
+        error: "job not found"
       });
     }
 
-    const stream =
-      await artifactStorage.getStream(
-        payload.jobId,
-        payload.file
+    const filePath =
+      path.join(
+        ARTIFACT_ROOT,
+        jobId,
+        file
       );
 
-    if (!stream) {
+    const normalized =
+      path.normalize(filePath);
+
+    if (
+      !normalized.startsWith(
+        path.join(ARTIFACT_ROOT, jobId)
+      )
+    ) {
+      return res.status(400).json({
+        error: "invalid path"
+      });
+    }
+
+    if (!fs.existsSync(filePath)) {
       return res.status(404).json({
         error: "artifact not found"
       });
     }
 
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${payload.file}"`
-    );
+    /**
+     * content type
+     */
+    if (file.endsWith(".apk")) {
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.android.package-archive"
+      );
+    }
 
-    stream.pipe(res);
+    if (file.endsWith(".ipa")) {
+      res.setHeader(
+        "Content-Type",
+        "application/octet-stream"
+      );
+    }
+
+    res.download(filePath);
 
   } catch (err) {
 
-    console.error(err);
+    console.error(
+      "artifact download error:",
+      err
+    );
 
     res.status(500).json({
-      error: "artifact download failed"
+      error: "internal error"
     });
 
   }

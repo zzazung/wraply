@@ -4,15 +4,25 @@ module.exports = {
 
   testTimeout: 30000,
 
-  globalSetup: "<rootDir>/tests/setup/db.setup.js",
-
-  globalTeardown: "<rootDir>/tests/setup/db.teardown.js",
-
   roots: [
     "<rootDir>/tests"
   ],
 
-  setupFiles: [
-    "<rootDir>/tests/setup.js"
-  ]
+  setupFilesAfterEnv: [
+    "<rootDir>/tests/setup/testEnv.js"
+  ],
+
+  globalSetup: "<rootDir>/tests/setup/db.setup.js",
+
+  globalTeardown: "<rootDir>/tests/setup/db.teardown.js",
+
+  collectCoverageFrom: [
+    "wraply-api/**/*.js",
+    "wraply-worker/**/*.js",
+    "wraply-scheduler/**/*.js",
+    "wraply-shared/**/*.js"
+  ],
+
+  coverageDirectory: "coverage"
+
 };

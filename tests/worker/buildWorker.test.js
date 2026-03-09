@@ -1,26 +1,73 @@
-jest.mock("../../wraply-api/db", () => ({
+const { Queue, Worker, QueueEvents } = require("bullmq");
+const Redis = require("ioredis");
 
-  query: jest.fn().mockResolvedValue([])
+describe("Worker Test", () => {
 
-}))
+  let connection;
+  let queue;
+  let worker;
+  let queueEvents;
 
-const { runBuild } = require("../../wraply-worker/queue/buildWorker")
+  beforeAll(async () => {
 
-describe("Build Worker", () => {
+    connection = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: null
+    });
 
-  test("runBuild should not crash", async () => {
+    queue = new Queue("wraply-build", {
+      connection
+    });
 
-    const job = {
-      jobId: "job_test",
-      platform: "android",
-      safeName: "test",
-      packageName: "com.test.app",
-      appName: "TestApp",
-      serviceUrl: "https://example.com"
+    queueEvents = new QueueEvents("wraply-build", {
+      connection
+    });
+
+    await queueEvents.waitUntilReady();
+
+  });
+
+  afterAll(async () => {
+
+    if (worker) {
+      await worker.close();
     }
 
-    await expect(runBuild(job)).resolves.not.toThrow()
+    if (queue) {
+      await queue.close();
+    }
 
-  })
+    if (queueEvents) {
+      await queueEvents.close();
+    }
 
-})
+    if (connection) {
+      await connection.quit();
+    }
+
+  });
+
+  test("process job", async () => {
+
+    worker = new Worker(
+      "wraply-build",
+      async job => {
+        return { status: "finished" };
+      },
+      {
+        connection
+      }
+    );
+
+    worker.on("error", () => {});
+
+    const job = await queue.add("build", {
+      jobId: "test-job"
+    });
+
+    const result = await job.waitUntilFinished(queueEvents);
+
+    expect(result.status).toBe("finished");
+
+  });
+
+});

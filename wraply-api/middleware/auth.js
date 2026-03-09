@@ -1,111 +1,116 @@
-const { verifyToken } = require("../lib/jwt");
+const jwt = require("../lib/jwt");
+const crypto = require("crypto");
 
-function extractToken(req) {
+const WORKER_TOKEN =
+  process.env.WORKER_TOKEN || "";
 
-  const header = req.headers.authorization;
 
-  if (!header) return null;
+/**
+ * 일반 사용자 인증
+ */
+function requireAuth(req, res, next) {
 
-  const parts = header.split(" ");
+  try {
 
-  if (parts.length !== 2) return null;
+    const header =
+      req.headers.authorization;
 
-  if (parts[0] !== "Bearer") return null;
+    if (!header) {
+      return res.status(401).json({
+        error: "missing authorization header"
+      });
+    }
 
-  return parts[1];
+    const parts =
+      header.split(" ");
+
+    if (
+      parts.length !== 2 ||
+      parts[0] !== "Bearer"
+    ) {
+      return res.status(401).json({
+        error: "invalid authorization format"
+      });
+    }
+
+    const token = parts[1];
+
+    const payload =
+      jwt.verify(token);
+
+    req.user = payload;
+
+    next();
+
+  } catch (err) {
+
+    console.error(
+      "auth verify error:",
+      err.message
+    );
+
+    res.status(401).json({
+      error: "unauthorized"
+    });
+
+  }
 
 }
 
-function requireUser(req, res, next) {
 
-  const token = extractToken(req);
 
-  if (!token) {
-
-    return res.status(401).json({
-      error: "Unauthorized"
-    });
-
-  }
-
-  const payload = verifyToken(token);
-
-  if (!payload) {
-
-    return res.status(401).json({
-      error: "Invalid token"
-    });
-
-  }
-
-  req.user = payload;
-
-  next();
-
-}
-
-function requireAdmin(req, res, next) {
-
-  const token = extractToken(req);
-
-  if (!token) {
-
-    return res.status(401).json({
-      error: "Unauthorized"
-    });
-
-  }
-
-  const payload = verifyToken(token);
-
-  if (!payload) {
-
-    return res.status(401).json({
-      error: "Invalid token"
-    });
-
-  }
-
-  if (payload.role !== "admin") {
-
-    return res.status(403).json({
-      error: "Forbidden"
-    });
-
-  }
-
-  req.user = payload;
-
-  next();
-
-}
-
+/**
+ * worker 인증
+ */
 function requireWorker(req, res, next) {
 
-  const token = req.headers["x-worker-token"];
+  try {
 
-  if (!token) {
+    const token =
+      req.headers["x-worker-token"];
 
-    return res.status(401).json({
-      error: "Worker auth required"
+    if (!token) {
+      return res.status(401).json({
+        error: "missing worker token"
+      });
+    }
+
+    const tokenBuf =
+      Buffer.from(token);
+
+    const secretBuf =
+      Buffer.from(WORKER_TOKEN);
+
+    if (
+      tokenBuf.length !== secretBuf.length ||
+      !crypto.timingSafeEqual(
+        tokenBuf,
+        secretBuf
+      )
+    ) {
+      return res.status(401).json({
+        error: "invalid worker token"
+      });
+    }
+
+    next();
+
+  } catch (err) {
+
+    console.error(
+      "worker auth error:",
+      err
+    );
+
+    res.status(401).json({
+      error: "unauthorized"
     });
 
   }
-
-  if (token !== process.env.WORKER_TOKEN) {
-
-    return res.status(403).json({
-      error: "Invalid worker token"
-    });
-
-  }
-
-  next();
 
 }
 
 module.exports = {
-  requireUser,
-  requireAdmin,
+  requireAuth,
   requireWorker
 };
