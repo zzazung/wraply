@@ -117,7 +117,7 @@ router.post("/", async (req, res) => {
       ]
     );
 
-    const [rows] = await query(
+    const rows = await query(
       `SELECT * FROM projects WHERE safe_name=?`,
       [safeName]
     );
@@ -146,7 +146,7 @@ router.get("/:projectId", async (req, res) => {
 
     const { projectId } = req.params;
 
-    const [rows] = await query(
+    const rows = await query(
       `
       SELECT
         id,
@@ -217,7 +217,7 @@ router.post("/:projectId/builds", async (req, res) => {
 
     }
 
-    const [rows] = await query(
+    const rows = await query(
       `SELECT * FROM projects WHERE id=?`,
       [projectId]
     );
@@ -297,7 +297,7 @@ router.get("/:projectId/builds", async (req, res) => {
 
     const { projectId } = req.params;
 
-    const [rows] = await query(
+    const rows = await query(
       `
       SELECT
         job_id,
