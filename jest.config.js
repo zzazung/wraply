@@ -12,8 +12,11 @@ module.exports = {
     "<rootDir>/tests"
   ],
 
+  setupFiles: [
+    "<rootDir>/tests/setup/testEnv.js"
+  ],
+
   setupFilesAfterEnv: [
-    "<rootDir>/tests/setup/testEnv.js",
     "<rootDir>/tests/setup/jest.setup.js"
   ],
 

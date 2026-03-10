@@ -1,6 +1,6 @@
 const request = require("supertest");
 
-const app = require("../../wraply-api/server");
+const app = require("../../wraply-api/app");
 
 const { createTestToken } = require("../helpers/auth");
 

@@ -23,11 +23,11 @@ if (process.env.NODE_ENV !== "test") {
 /**
  * server start
  */
-server.listen(PORT, () => {
-
-  console.log(`✅ Wraply API running on ${PORT}`);
-
-});
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`✅ Wraply API running on ${PORT}`);
+  });
+}
 
 /**
  * graceful shutdown

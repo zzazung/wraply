@@ -18,7 +18,9 @@
 
 // }
 
-require("./testEnv");
+require("dotenv").config({
+  path: ".env.test"
+});
 
 const db = require("@wraply/shared/db");
 

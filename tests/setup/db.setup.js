@@ -1,4 +1,6 @@
-require("./testEnv");
+require("dotenv").config({
+  path: ".env.test"
+});
 
 const mysql = require("mysql2/promise");
 
