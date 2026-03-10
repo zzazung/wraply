@@ -6,7 +6,7 @@ const { v4: uuidv4 } = require("uuid");
 const { requireAuth } = require("../middleware/auth");
 const { enqueueBuild } = require("../queue/buildQueue");
 
-const pool = require("@wraply/shared/db");
+const { query } = require("@wraply/shared/db");
 
 const router = express.Router();
 
@@ -16,11 +16,11 @@ router.use(requireAuth);
 /**
  * projects 목록
  */
-router.get("/projects", async (req, res) => {
+router.get("/", async (req, res) => {
 
   try {
 
-    const [rows] = await pool.query(
+    const rows = await query(
       `
       SELECT
         id,
@@ -64,7 +64,7 @@ router.get("/projects", async (req, res) => {
 /**
  * project 생성 (upsert)
  */
-router.post("/projects", async (req, res) => {
+router.post("/", async (req, res) => {
 
   try {
 
@@ -88,7 +88,7 @@ router.post("/projects", async (req, res) => {
 
     const id = uuidv4();
 
-    await pool.query(
+    await query(
       `
       INSERT INTO projects
       (
@@ -117,7 +117,7 @@ router.post("/projects", async (req, res) => {
       ]
     );
 
-    const [rows] = await pool.query(
+    const [rows] = await query(
       `SELECT * FROM projects WHERE safe_name=?`,
       [safeName]
     );
@@ -140,13 +140,13 @@ router.post("/projects", async (req, res) => {
 /**
  * project 상세
  */
-router.get("/projects/:projectId", async (req, res) => {
+router.get("/:projectId", async (req, res) => {
 
   try {
 
     const { projectId } = req.params;
 
-    const [rows] = await pool.query(
+    const [rows] = await query(
       `
       SELECT
         id,
@@ -201,7 +201,7 @@ router.get("/projects/:projectId", async (req, res) => {
 /**
  * 프로젝트에서 build 요청
  */
-router.post("/projects/:projectId/builds", async (req, res) => {
+router.post("/:projectId/builds", async (req, res) => {
 
   try {
 
@@ -217,7 +217,7 @@ router.post("/projects/:projectId/builds", async (req, res) => {
 
     }
 
-    const [rows] = await pool.query(
+    const [rows] = await query(
       `SELECT * FROM projects WHERE id=?`,
       [projectId]
     );
@@ -235,7 +235,7 @@ router.post("/projects/:projectId/builds", async (req, res) => {
     const jobId =
       `job_${uuidv4()}`;
 
-    await pool.query(
+    await query(
       `
       INSERT INTO jobs
       (
@@ -291,13 +291,13 @@ router.post("/projects/:projectId/builds", async (req, res) => {
 /**
  * 프로젝트 build 이력
  */
-router.get("/projects/:projectId/builds", async (req, res) => {
+router.get("/:projectId/builds", async (req, res) => {
 
   try {
 
     const { projectId } = req.params;
 
-    const [rows] = await pool.query(
+    const [rows] = await query(
       `
       SELECT
         job_id,

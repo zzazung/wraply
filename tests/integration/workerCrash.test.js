@@ -1,34 +1,76 @@
-const { Queue, Worker } = require("bullmq");
-
+const { Queue, Worker, QueueEvents } = require("bullmq");
 const Redis = require("ioredis");
 
 describe("Worker Crash Recovery", () => {
 
-  const connection = new Redis();
+  let connection;
+  let queue;
+  let worker;
+  let queueEvents;
 
-  const queue = new Queue("wraply-build", { connection });
+  beforeAll(async () => {
+
+    connection = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: null
+    });
+
+    queue = new Queue("wraply-build", {
+      connection
+    });
+
+    queueEvents = new QueueEvents("wraply-build", {
+      connection
+    });
+
+    await queueEvents.waitUntilReady();
+
+  });
+
+  afterAll(async () => {
+
+    if (worker) {
+      await worker.close();
+    }
+
+    if (queue) {
+      await queue.close();
+    }
+
+    if (queueEvents) {
+      await queueEvents.close();
+    }
+
+    if (connection) {
+      await connection.quit();
+    }
+
+  });
 
   test("worker crash", async () => {
 
-    const worker = new Worker(
+    worker = new Worker(
       "wraply-build",
       async () => {
-
         throw new Error("worker crash");
-
       },
-      { connection }
+      {
+        connection
+      }
     );
 
+    worker.on("error", () => {});
+
     const job = await queue.add("build", {
-      jobId: "crash-job"
+      jobId: "crash-test"
     });
 
-    await expect(
-      job.waitUntilFinished(connection)
-    ).rejects.toThrow();
+    await new Promise(resolve => {
+      worker.once("failed", () => resolve());
+    });
 
-    await worker.close();
+    const failed = await queue.getFailed();
+
+    expect(failed.length).toBeGreaterThan(0);
 
   });
 

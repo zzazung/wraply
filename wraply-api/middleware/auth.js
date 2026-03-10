@@ -36,7 +36,14 @@ function requireAuth(req, res, next) {
     const token = parts[1];
 
     const payload =
-      jwt.verify(token);
+      jwt.verifyToken(token);
+    console.log("AUTH PAYLOAD:", payload);
+
+    if (!payload) {
+      return res.status(401).json({
+        error: "unauthorized"
+      });
+    }
 
     req.user = payload;
 

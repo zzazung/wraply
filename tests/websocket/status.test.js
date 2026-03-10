@@ -2,8 +2,7 @@ const WebSocket = require("ws");
 const Redis = require("ioredis");
 const http = require("http");
 
-const { startWebSocket } =
-  require("../../wraply-api/websocket");
+const { startWebSocket, closeWebSocket } = require("../../wraply-api/websocket");
 
 let server;
 let redis;
@@ -25,10 +24,15 @@ describe("WebSocket Status Streaming", () => {
 
   });
 
-  afterAll(done => {
+  afterAll(async () => {
 
-    redis.disconnect();
-    server.close(done);
+    if (redis) {
+      redis.disconnect();
+    }
+
+    await closeWebSocket();
+
+    await new Promise(resolve => server.close(resolve));
 
   });
 

@@ -2,8 +2,7 @@ const WebSocket = require("ws");
 const Redis = require("ioredis");
 const http = require("http");
 
-const { startWebSocket, closeWebSocket } =
-  require("../../wraply-api/websocket");
+const { startWebSocket, closeWebSocket } = require("../../wraply-api/websocket");
 
 let server;
 let redis;

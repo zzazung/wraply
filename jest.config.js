@@ -13,8 +13,16 @@ module.exports = {
   ],
 
   setupFilesAfterEnv: [
-    "<rootDir>/tests/setup/testEnv.js"
+    "<rootDir>/tests/setup/testEnv.js",
+    "<rootDir>/tests/setup/jest.setup.js"
   ],
+
+  moduleNameMapper: {
+    "^@wraply/shared/(.*)$": "<rootDir>/wraply-shared/$1",
+    "^@wraply/api/(.*)$": "<rootDir>/wraply-api/$1",
+    "^@wraply/worker/(.*)$": "<rootDir>/wraply-worker/$1",
+    "^@wraply/scheduler/(.*)$": "<rootDir>/wraply-scheduler/$1"
+  },
 
   globalSetup: "<rootDir>/tests/setup/db.setup.js",
 
@@ -27,6 +35,8 @@ module.exports = {
     "wraply-shared/**/*.js"
   ],
 
-  coverageDirectory: "coverage"
+  coverageDirectory: "coverage",
+
+  maxWorkers: 1
 
 };

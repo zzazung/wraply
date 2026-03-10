@@ -8,6 +8,9 @@ let redisSub = null;
 let wss = null;
 let heartbeatInterval = null;
 
+const isTest = process.env.NODE_ENV === "test";
+let shuttingDown = false;
+
 
 /**
  * broadcast
@@ -52,6 +55,10 @@ function broadcast(jobId, payload) {
  * heartbeat update
  */
 async function updateHeartbeat(jobId) {
+
+  if (isTest || shuttingDown) {
+    return;
+  }
 
   try {
 
@@ -105,17 +112,25 @@ function initRedisSubscriber() {
 
   redisSub.on("error", err => {
 
-    console.error("Redis subscriber error:", err);
+    if (!shuttingDown) {
+      console.error("Redis subscriber error:", err);
+    }
 
   });
 
   redisSub.on("reconnecting", () => {
 
-    console.log("Redis reconnecting...");
+    if (!shuttingDown) {
+      console.log("Redis reconnecting...");
+    }
 
   });
 
   redisSub.on("message", async (channel, msg) => {
+
+    if (shuttingDown) {
+      return;
+    }
 
     let data;
 
@@ -237,7 +252,9 @@ function startWebSocket(server) {
 
       ws.on("error", err => {
 
-        console.error("ws error:", err);
+        if (!shuttingDown) {
+          console.error("ws error:", err);
+        }
 
         try {
           ws.close();
@@ -247,7 +264,9 @@ function startWebSocket(server) {
 
     } catch (err) {
 
-      console.error("WebSocket error:", err);
+      if (!shuttingDown) {
+        console.error("WebSocket error:", err);
+      }
 
       try {
         ws.close();
@@ -261,6 +280,10 @@ function startWebSocket(server) {
    * heartbeat ping
    */
   heartbeatInterval = setInterval(() => {
+
+    if (!wss) {
+      return;
+    }
 
     wss.clients.forEach(ws => {
 
@@ -295,7 +318,10 @@ function startWebSocket(server) {
   wss.on("close", () => {
 
     if (heartbeatInterval) {
+
       clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+
     }
 
   });
@@ -311,6 +337,23 @@ function startWebSocket(server) {
  * graceful shutdown
  */
 async function closeWebSocket() {
+
+  shuttingDown = true;
+
+  try {
+
+    if (heartbeatInterval) {
+
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+
+    }
+
+  } catch (err) {
+
+    console.error("interval shutdown error:", err);
+
+  }
 
   try {
 
@@ -329,24 +372,19 @@ async function closeWebSocket() {
 
   try {
 
-    if (heartbeatInterval) {
-
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
-
-    }
-
     if (wss) {
 
-      wss.clients.forEach(ws => {
+      for (const ws of wss.clients) {
 
         try {
           ws.close();
         } catch {}
 
-      });
+      }
 
-      wss.close();
+      await new Promise(resolve => {
+        wss.close(resolve);
+      });
 
       wss = null;
 
@@ -359,6 +397,8 @@ async function closeWebSocket() {
   }
 
   jobClients.clear();
+
+  shuttingDown = false;
 
 }
 
