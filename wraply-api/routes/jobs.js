@@ -313,8 +313,6 @@ router.get("/:jobId/log", async (req, res) => {
 
 });
 
-
-
 /**
  * Artifacts
  */
@@ -322,30 +320,39 @@ router.get("/:jobId/artifacts", async (req, res) => {
 
   try {
 
-    const { jobId } =
-      req.params;
+    const { jobId } = req.params;
 
     const rows =
       await query(
         `
-        SELECT name,path
+        SELECT
+          id,
+          platform,
+          path,
+          created_at
         FROM artifacts
         WHERE job_id=?
+        ORDER BY created_at DESC
         `,
         [jobId]
       );
+
+    const base =
+      process.env.CDN_BASE ||
+      process.env.API_BASE ||
+      `http://localhost:${process.env.API_PORT || 4000}`;
 
     const items =
       rows
         .filter(r => r.path && !r.path.includes(".."))
         .map(r => ({
-          name: r.name,
-          downloadUrl: `/downloads/${r.path}`
+          id: r.id,
+          platform: r.platform || null,
+          downloadUrl: `${base}/downloads/${r.path}`,
+          createdAt: new Date(r.created_at).getTime()
         }));
 
-    res.json({
-      items
-    });
+    res.json({ items });
 
   } catch (err) {
 
@@ -358,7 +365,6 @@ router.get("/:jobId/artifacts", async (req, res) => {
   }
 
 });
-
 
 
 /**

@@ -1,34 +1,38 @@
 const { Worker } = require("bullmq");
-const IORedis = require("ioredis");
 
-const { runBuild } = require("./buildWorker");
+const redis =
+  require("@wraply/shared/redis");
 
-require('dotenv').config();
-
-const connection = new IORedis(
-  process.env.REDIS_URL || "redis://127.0.0.1:6379"
-);
+const { runBuild } =
+  require("./buildWorker");
 
 const worker = new Worker(
   "wraply-build",
   async job => {
 
-    const payload = job.data;
-
-    await runBuild(payload);
+    await runBuild(job.data);
 
   },
-  { connection }
+  {
+    connection: redis
+  }
 );
 
 worker.on("completed", job => {
 
-  console.log("build completed", job.id);
+  console.log(
+    "[wraply-worker] job completed",
+    job.id
+  );
 
 });
 
 worker.on("failed", (job, err) => {
 
-  console.error("build failed", err);
+  console.error(
+    "[wraply-worker] job failed",
+    job?.id,
+    err
+  );
 
 });

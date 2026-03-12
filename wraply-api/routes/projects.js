@@ -197,6 +197,60 @@ router.get("/:projectId", async (req, res) => {
 
 });
 
+/**
+ * Project Build History
+ */
+router.get("/:projectId/builds", async (req, res) => {
+
+  try {
+
+    const { projectId } = req.params;
+
+    const rows =
+      await query(
+        `
+        SELECT
+          job_id,
+          platform,
+          status,
+          progress,
+          created_at,
+          updated_at,
+          finished_at,
+          error_reason
+        FROM jobs
+        WHERE project_id=?
+        ORDER BY created_at DESC
+        LIMIT 50
+        `,
+        [projectId]
+      );
+
+    const items =
+      rows.map(r => ({
+        jobId: r.job_id,
+        platform: r.platform,
+        status: r.status,
+        progress: r.progress,
+        createdAt: new Date(r.created_at).getTime(),
+        updatedAt: r.updated_at ? new Date(r.updated_at).getTime() : null,
+        finishedAt: r.finished_at ? new Date(r.finished_at).getTime() : null,
+        error: r.error_reason || null
+      }));
+
+    res.json({ items });
+
+  } catch (err) {
+
+    console.error("project build history error:", err);
+
+    res.status(500).json({
+      error: "internal error"
+    });
+
+  }
+
+});
 
 /**
  * 프로젝트에서 build 요청

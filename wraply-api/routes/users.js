@@ -7,7 +7,7 @@ const fs = require("fs");
 
 const router = express.Router();
 
-const { STATES } = require("wraply-shared/job/jobState");
+const { STATES } = require("@wraply/shared/job/jobState");
 
 /* --------------------------------------------------
    🔐 Mock Auth Middleware

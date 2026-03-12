@@ -1,5 +1,8 @@
 {
     "name": "@wraply/shared",
     "version": "1.0.0",
-    "main": "index.js"
+    "main": "index.js",
+    "devDependencies": {
+        "ioredis": "^5.10.0"
+    }
 }

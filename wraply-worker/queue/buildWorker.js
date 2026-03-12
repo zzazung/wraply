@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const { spawn } = require("child_process");
 const { v4: uuidv4 } = require("uuid");
 
@@ -19,6 +20,12 @@ const BUILD_ROOT =
   process.env.WRAPLY_BUILD_ROOT ||
   "/tmp/wraply-builds";
 
+const CI_ROOT =
+  process.env.CI_ROOT ||
+  BUILD_ROOT;
+
+/* workspace helpers */
+
 function ensureDir(dir) {
 
   if (!fs.existsSync(dir)) {
@@ -35,34 +42,95 @@ function cleanupWorkspace(dir) {
 
 }
 
-async function saveArtifact(jobId, filePath) {
+/* checksum */
 
-  const stat = fs.statSync(filePath);
-  const fileName = path.basename(filePath);
+function sha256(filePath) {
 
-  let type = "file";
+  const hash =
+    crypto.createHash("sha256");
 
-  if (fileName.endsWith(".apk")) type = "apk";
-  if (fileName.endsWith(".aab")) type = "aab";
-  if (fileName.endsWith(".ipa")) type = "ipa";
+  const buffer =
+    fs.readFileSync(filePath);
+
+  hash.update(buffer);
+
+  return hash.digest("hex");
+
+}
+
+/* artifact save */
+
+async function saveArtifact(
+  jobId,
+  platform,
+  filePath
+) {
+
+  const stat =
+    fs.statSync(filePath);
+
+  const name =
+    path.basename(filePath);
+
+  const relPath =
+    path.relative(CI_ROOT, filePath);
+
+  let type = null;
+
+  if (name.endsWith(".apk"))
+    type = "apk";
+
+  if (name.endsWith(".aab"))
+    type = "aab";
+
+  if (name.endsWith(".ipa"))
+    type = "ipa";
+
+  const checksum =
+    sha256(filePath);
 
   await query(
     `
     INSERT INTO artifacts
-    (id, job_id, file_name, file_size, file_type, file_path)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `,
-    [uuidv4(), jobId, fileName, stat.size, type, filePath]
+    (
+      id,
+      job_id,
+      platform,
+      type,
+      name,
+      path,
+      size,
+      checksum
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      uuidv4(),
+      jobId,
+      platform,
+      type,
+      name,
+      relPath,
+      stat.size,
+      checksum
+    ]
   );
 
 }
 
-async function scanArtifacts(jobId, artifactDir) {
+/* artifact scan */
+
+async function scanArtifacts(
+  jobId,
+  platform,
+  artifactDir
+) {
 
   if (!artifactDir) return;
   if (!fs.existsSync(artifactDir)) return;
 
-  const files = fs.readdirSync(artifactDir);
+  const files =
+    fs.readdirSync(artifactDir);
 
   for (const f of files) {
 
@@ -75,9 +143,16 @@ async function scanArtifacts(jobId, artifactDir) {
       const artifactPath =
         path.join(artifactDir, f);
 
-      await saveArtifact(jobId, artifactPath);
+      await saveArtifact(
+        jobId,
+        platform,
+        artifactPath
+      );
 
-      await publishLog(jobId, `artifact detected: ${f}`);
+      await publishLog(
+        jobId,
+        `artifact detected: ${f}`
+      );
 
     }
 
@@ -85,30 +160,40 @@ async function scanArtifacts(jobId, artifactDir) {
 
 }
 
-/**
- * 상태 전이 적용
- */
-async function transition(jobId, nextState) {
+/* state transition */
+
+async function transition(
+  jobId,
+  nextState
+) {
 
   const rows = await query(
-    `SELECT status FROM jobs WHERE job_id=?`,
+    `
+    SELECT status
+    FROM jobs
+    WHERE job_id=?
+    `,
     [jobId]
   );
 
-  if (!rows || rows.length === 0) {
+  if (!rows || rows.length === 0)
     throw new Error("job not found");
-  }
 
-  const current = rows[0].status;
+  const current =
+    rows[0].status;
 
-  if (!isValidTransition(current, nextState)) {
+  if (!isValidTransition(
+    current,
+    nextState
+  )) {
 
     await publishLog(
       jobId,
-      `invalid state transition ${current} -> ${nextState}`
+      `invalid transition ${current} -> ${nextState}`
     );
 
     return;
+
   }
 
   await publishStatus(
@@ -118,6 +203,8 @@ async function transition(jobId, nextState) {
   );
 
 }
+
+/* main build */
 
 async function runBuild(job) {
 
@@ -135,11 +222,14 @@ async function runBuild(job) {
 
   ensureDir(workspace);
 
+  let heartbeatTimer = null;
+
   try {
 
     await transition(jobId, STATES.PREPARING);
 
-    const heartbeatTimer = startHeartbeat(jobId);
+    heartbeatTimer =
+      startHeartbeat(jobId);
 
     const workerRoot =
       process.env.WORKER_ROOT ||
@@ -180,7 +270,10 @@ async function runBuild(job) {
 
     await transition(jobId, STATES.PATCHING);
 
-    await publishLog(jobId, `workspace: ${workspace}`);
+    await publishLog(
+      jobId,
+      `workspace: ${workspace}`
+    );
 
     await transition(jobId, STATES.BUILDING);
 
@@ -209,7 +302,8 @@ async function runBuild(job) {
 
     proc.stdout.on("data", async data => {
 
-      const text = data.toString();
+      const text =
+        data.toString();
 
       await publishLog(jobId, text);
 
@@ -247,13 +341,19 @@ async function runBuild(job) {
 
     proc.stderr.on("data", async data => {
 
-      await publishLog(jobId, data.toString());
+      await publishLog(
+        jobId,
+        data.toString()
+      );
 
     });
 
     proc.on("error", async err => {
 
-      await publishLog(jobId, `spawn error: ${err.message}`);
+      await publishLog(
+        jobId,
+        `spawn error: ${err.message}`
+      );
 
       await transition(jobId, STATES.FAILED);
 
@@ -265,7 +365,10 @@ async function runBuild(job) {
 
     const timeout = setTimeout(async () => {
 
-      await publishLog(jobId, "build timeout");
+      await publishLog(
+        jobId,
+        "build timeout"
+      );
 
       proc.kill("SIGKILL");
 
@@ -287,7 +390,11 @@ async function runBuild(job) {
 
         await transition(jobId, STATES.UPLOADING);
 
-        await scanArtifacts(jobId, artifactDir);
+        await scanArtifacts(
+          jobId,
+          platform,
+          artifactDir
+        );
 
         await transition(jobId, STATES.FINISHED);
 
@@ -305,7 +412,10 @@ async function runBuild(job) {
 
   } catch (err) {
 
-    await publishLog(jobId, err.message);
+    await publishLog(
+      jobId,
+      err.message
+    );
 
     await transition(jobId, STATES.FAILED);
 

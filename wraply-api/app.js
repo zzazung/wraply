@@ -23,8 +23,10 @@ const corsOptions = {
     const allowed = [
       "http://localhost:3000",
       "http://localhost:3001",
+      "http://localhost:5173",
       "http://192.168.0.177:3000",
-      "http://192.168.0.177:3001"
+      "http://192.168.0.177:3001",
+      "http://192.168.0.177:5173",
     ];
 
     if (!origin || allowed.includes(origin)) {
