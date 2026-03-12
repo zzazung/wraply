@@ -51,8 +51,6 @@ projects
 |------|-------------|
 | id | project id |
 | name | project display name |
-| safe_name | safe build identifier |
-| package_name | app package id |
 | created_at | created time |
 | updated_at | updated time |
 

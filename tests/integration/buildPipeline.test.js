@@ -51,7 +51,12 @@ describe("Build Pipeline", () => {
     worker = new Worker(
       "wraply-build",
       async job => {
-        return { status: "finished" };
+
+        return {
+          status: "finished",
+          progress: 100
+        };
+
       },
       {
         connection: redis
@@ -64,9 +69,11 @@ describe("Build Pipeline", () => {
       jobId: "pipeline-test"
     });
 
-    const result = await job.waitUntilFinished(queueEvents);
+    const result =
+      await job.waitUntilFinished(queueEvents);
 
     expect(result.status).toBe("finished");
+    expect(result.progress).toBe(100);
 
   });
 

@@ -1,5 +1,4 @@
 const { startCron } = require("./cron/cronRunner");
-const recoverStuckJobs = require("./jobs/recoverStuckJobs");
 const { startWatchdog, startHeartbeatListener } = require("./watchdog/buildWatchdog");
 
 async function startScheduler() {
@@ -11,20 +10,6 @@ async function startScheduler() {
   await startHeartbeatListener();
 
   startWatchdog();
-
-  setInterval(async () => {
-
-    try {
-
-      await recoverStuckJobs();
-
-    } catch (err) {
-
-      console.error("recoverStuckJobs error:", err);
-
-    }
-
-  }, 60000);
 
 }
 

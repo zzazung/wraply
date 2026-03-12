@@ -1,6 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const os = require("os");
 const { spawn } = require("child_process");
 const { v4: uuidv4 } = require("uuid");
 
@@ -23,6 +24,13 @@ const BUILD_ROOT =
 const CI_ROOT =
   process.env.CI_ROOT ||
   BUILD_ROOT;
+
+const WORKER_ID =
+  process.env.WORKER_ID ||
+  `${os.hostname()}-${process.pid}`;
+
+const BUILD_HOST =
+  os.hostname();
 
 /* workspace helpers */
 
@@ -77,14 +85,9 @@ async function saveArtifact(
 
   let type = null;
 
-  if (name.endsWith(".apk"))
-    type = "apk";
-
-  if (name.endsWith(".aab"))
-    type = "aab";
-
-  if (name.endsWith(".ipa"))
-    type = "ipa";
+  if (name.endsWith(".apk")) type = "apk";
+  if (name.endsWith(".aab")) type = "aab";
+  if (name.endsWith(".ipa")) type = "ipa";
 
   const checksum =
     sha256(filePath);
@@ -196,10 +199,44 @@ async function transition(
 
   }
 
+  const progress =
+    getProgress(nextState);
+
   await publishStatus(
     jobId,
     nextState,
-    getProgress(nextState)
+    progress
+  );
+
+  await query(
+    `
+    UPDATE jobs
+    SET
+      status=?,
+      progress=?,
+      updated_at=NOW()
+    WHERE job_id=?
+    `,
+    [
+      nextState,
+      progress,
+      jobId
+    ]
+  );
+
+}
+
+/* heartbeat DB update */
+
+async function updateHeartbeat(jobId) {
+
+  await query(
+    `
+    UPDATE jobs
+    SET heartbeat_at=NOW()
+    WHERE job_id=?
+    `,
+    [jobId]
   );
 
 }
@@ -208,222 +245,284 @@ async function transition(
 
 async function runBuild(job) {
 
-  const {
-    jobId,
-    platform,
-    safeName,
-    packageName,
-    appName,
-    serviceUrl
-  } = job;
+  return new Promise(async (resolve) => {
 
-  const workspace =
-    path.join(BUILD_ROOT, jobId);
+    const {
+      jobId,
+      platform,
+      safeName,
+      packageName,
+      appName,
+      serviceUrl
+    } = job;
 
-  ensureDir(workspace);
+    const workspace =
+      path.join(BUILD_ROOT, jobId);
 
-  let heartbeatTimer = null;
+    ensureDir(workspace);
 
-  try {
+    let heartbeatTimer = null;
+    let heartbeatDB = null;
 
-    await transition(jobId, STATES.PREPARING);
+    try {
 
-    heartbeatTimer =
-      startHeartbeat(jobId);
-
-    const workerRoot =
-      process.env.WORKER_ROOT ||
-      process.cwd();
-
-    const scriptsDir =
-      path.join(workerRoot, "scripts");
-
-    let script;
-
-    if (platform === "android") {
-
-      script =
-        path.join(
-          scriptsDir,
-          "build_android_fastlane.sh"
-        );
-
-    }
-
-    if (platform === "ios") {
-
-      script =
-        path.join(
-          scriptsDir,
-          "build_ios_fastlane.sh"
-        );
-
-    }
-
-    if (!script || !fs.existsSync(script)) {
-
-      throw new Error(
-        `build script not found for platform: ${platform}`
+      await query(
+        `
+        UPDATE jobs
+        SET
+          worker_id=?,
+          build_host=?,
+          updated_at=NOW()
+        WHERE job_id=?
+        `,
+        [
+          WORKER_ID,
+          BUILD_HOST,
+          jobId
+        ]
       );
 
-    }
+      await transition(jobId, STATES.PREPARING);
 
-    await transition(jobId, STATES.PATCHING);
+      heartbeatTimer =
+        startHeartbeat(jobId);
 
-    await publishLog(
-      jobId,
-      `workspace: ${workspace}`
-    );
+      heartbeatDB =
+        setInterval(
+          () => updateHeartbeat(jobId),
+          10000
+        );
 
-    await transition(jobId, STATES.BUILDING);
+      const workerRoot =
+        process.env.WORKER_ROOT ||
+        process.cwd();
 
-    const proc = spawn(
+      const scriptsDir =
+        path.join(workerRoot, "scripts");
 
-      "bash",
+      let script;
 
-      [
-        script,
-        safeName,
-        packageName,
-        appName,
-        serviceUrl
-      ],
+      if (platform === "android")
+        script = path.join(scriptsDir, "build_android_fastlane.sh");
 
-      {
-        cwd: workspace,
-        env: process.env
+      if (platform === "ios")
+        script = path.join(scriptsDir, "build_ios_fastlane.sh");
+
+      if (!script || !fs.existsSync(script)) {
+
+        throw new Error(
+          `build script not found for platform: ${platform}`
+        );
+
       }
 
-    );
+      await transition(jobId, STATES.PATCHING);
 
-    registerBuild(jobId, proc);
+      await publishLog(
+        jobId,
+        `workspace: ${workspace}`
+      );
 
-    let artifactDir = null;
+      await transition(jobId, STATES.BUILDING);
 
-    proc.stdout.on("data", async data => {
+      const proc = spawn(
+        "bash",
+        [
+          script,
+          safeName,
+          packageName,
+          appName,
+          serviceUrl
+        ],
+        {
+          cwd: workspace,
+          env: process.env
+        }
+      );
 
-      const text =
-        data.toString();
+      registerBuild(jobId, proc);
 
-      await publishLog(jobId, text);
+      let artifactDir = null;
 
-      if (text.includes("OUTPUT_DIR=")) {
+      proc.stdout.on("data", async data => {
 
-        const parts =
-          text.trim().split("OUTPUT_DIR=");
+        const text =
+          data.toString();
 
-        if (parts.length > 1) {
+        await publishLog(jobId, text);
 
-          const candidate =
-            path.resolve(
-              workspace,
-              parts[1].trim()
-            );
+        if (text.includes("OUTPUT_DIR=")) {
 
-          if (candidate.startsWith(workspace)) {
+          const parts =
+            text.trim().split("OUTPUT_DIR=");
 
-            artifactDir = candidate;
+          if (parts.length > 1) {
 
-          } else {
+            const candidate =
+              path.resolve(
+                workspace,
+                parts[1].trim()
+              );
 
-            await publishLog(
-              jobId,
-              "invalid artifact path ignored"
-            );
+            if (candidate.startsWith(workspace)) {
+
+              artifactDir = candidate;
+
+              await query(
+                `
+                UPDATE jobs
+                SET artifact_dir=?
+                WHERE job_id=?
+                `,
+                [
+                  path.relative(
+                    CI_ROOT,
+                    candidate
+                  ),
+                  jobId
+                ]
+              );
+
+            }
 
           }
 
         }
 
-      }
+      });
 
-    });
+      proc.stderr.on("data", async data => {
 
-    proc.stderr.on("data", async data => {
-
-      await publishLog(
-        jobId,
-        data.toString()
-      );
-
-    });
-
-    proc.on("error", async err => {
-
-      await publishLog(
-        jobId,
-        `spawn error: ${err.message}`
-      );
-
-      await transition(jobId, STATES.FAILED);
-
-      stopHeartbeat(heartbeatTimer);
-
-      cleanupWorkspace(workspace);
-
-    });
-
-    const timeout = setTimeout(async () => {
-
-      await publishLog(
-        jobId,
-        "build timeout"
-      );
-
-      proc.kill("SIGKILL");
-
-      await transition(jobId, STATES.FAILED);
-
-      stopHeartbeat(heartbeatTimer);
-
-    }, 30 * 60 * 1000);
-
-    proc.on("close", async code => {
-
-      clearTimeout(timeout);
-
-      unregisterBuild(jobId);
-
-      if (code === 0) {
-
-        await transition(jobId, STATES.SIGNING);
-
-        await transition(jobId, STATES.UPLOADING);
-
-        await scanArtifacts(
+        await publishLog(
           jobId,
-          platform,
-          artifactDir
+          data.toString()
         );
 
-        await transition(jobId, STATES.FINISHED);
+      });
 
-      } else {
+      proc.on("error", async err => {
 
-        await transition(jobId, STATES.FAILED);
+        await publishLog(
+          jobId,
+          `spawn error: ${err.message}`
+        );
 
-      }
+        clearInterval(heartbeatDB);
+        stopHeartbeat(heartbeatTimer);
 
+        cleanupWorkspace(workspace);
+
+        resolve({
+          status: "failed",
+          progress: 0
+        });
+
+      });
+
+      const timeout = setTimeout(() => {
+
+        proc.kill("SIGKILL");
+
+      }, 30 * 60 * 1000);
+
+      proc.on("close", async code => {
+
+        clearTimeout(timeout);
+
+        unregisterBuild(jobId);
+
+        clearInterval(heartbeatDB);
+        stopHeartbeat(heartbeatTimer);
+
+        if (code === 0) {
+
+          await transition(jobId, STATES.SIGNING);
+          await transition(jobId, STATES.UPLOADING);
+
+          await scanArtifacts(
+            jobId,
+            platform,
+            artifactDir
+          );
+
+          await transition(jobId, STATES.FINISHED);
+
+          await query(
+            `
+            UPDATE jobs
+            SET finished_at=NOW()
+            WHERE job_id=?
+            `,
+            [jobId]
+          );
+
+          cleanupWorkspace(workspace);
+
+          resolve({
+            status: STATES.FINISHED,
+            progress: getProgress(STATES.FINISHED)
+          });
+
+        } else {
+
+          await query(
+            `
+            UPDATE jobs
+            SET
+              status='failed',
+              error_reason='build failed',
+              finished_at=NOW()
+            WHERE job_id=?
+            `,
+            [jobId]
+          );
+
+          cleanupWorkspace(workspace);
+
+          resolve({
+            status: STATES.FAILED,
+            progress: getProgress(STATES.FAILED)
+          });
+
+        }
+
+      });
+
+    } catch (err) {
+
+      await publishLog(
+        jobId,
+        err.message
+      );
+
+      await query(
+        `
+        UPDATE jobs
+        SET
+          status='failed',
+          error_reason=?,
+          finished_at=NOW()
+        WHERE job_id=?
+        `,
+        [
+          err.message,
+          jobId
+        ]
+      );
+
+      clearInterval(heartbeatDB);
       stopHeartbeat(heartbeatTimer);
 
       cleanupWorkspace(workspace);
 
-    });
+      resolve({
+        status: STATES.FAILED,
+        progress: getProgress(STATES.FAILED)
+      });
 
-  } catch (err) {
+    }
 
-    await publishLog(
-      jobId,
-      err.message
-    );
-
-    await transition(jobId, STATES.FAILED);
-
-    stopHeartbeat(heartbeatTimer);
-
-    cleanupWorkspace(workspace);
-
-  }
+  });
 
 }
 

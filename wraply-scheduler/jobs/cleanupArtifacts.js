@@ -1,5 +1,5 @@
 const { query } = require("@wraply/shared/db");
-const fs = require("fs");
+const artifactStorage = require("@wraply/shared/storage/artifactStorage");
 
 async function cleanupArtifacts() {
 
@@ -11,11 +11,13 @@ async function cleanupArtifacts() {
     WHERE created_at < NOW() - INTERVAL 30 DAY
   `);
 
+  if (!rows.length) return;
+
   for (const artifact of rows) {
 
     try {
 
-      fs.unlinkSync(artifact.file_path);
+      await artifactStorage.deleteArtifact(artifact.file_path);
 
       await query(`
         DELETE FROM artifacts

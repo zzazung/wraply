@@ -10,7 +10,7 @@ const worker = new Worker(
   "wraply-build",
   async job => {
 
-    await runBuild(job.data);
+    return await runBuild(job.data);
 
   },
   {
@@ -18,11 +18,12 @@ const worker = new Worker(
   }
 );
 
-worker.on("completed", job => {
+worker.on("completed", (job, result) => {
 
   console.log(
     "[wraply-worker] job completed",
-    job.id
+    job.id,
+    result
   );
 
 });

@@ -1,51 +1,50 @@
 const request = require("supertest");
-const jwt = require("jsonwebtoken");
-
 const app = require("../../wraply-api/app");
-
-const db = require("@wraply/shared/db");
+const { query } = require("@wraply/shared/db");
 
 describe("Jobs API", () => {
-
-  const token = jwt.sign(
-    { userId: 1 },
-    process.env.JWT_SECRET
-  );
 
   const jobId = "test-job-1";
 
   beforeAll(async () => {
-    await db.query(
-      "DELETE FROM jobs WHERE job_id=?",
-      ["test-job-1"]
-    );
 
-    await db.query(
-      "INSERT INTO jobs (job_id, status) VALUES (?, ?);",
-      [jobId, "queued"]
-    );
+    await query(`
+      INSERT INTO jobs (
+        job_id,
+        platform,
+        package_name,
+        safe_name,
+        app_name,
+        status,
+        progress,
+        created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+    `, [
+      jobId,
+      "android",
+      "com.test.app",
+      "test",
+      "Test App",
+      "finished",
+      100
+    ]);
 
-  });
-
-  afterAll(async () => {
-
-    await db.query(
-      "DELETE FROM jobs WHERE job_id=?;",
-      [jobId]
-    );
-
-    if (db.pool) {
-      await db.pool.end();
-    }
   });
 
   test("GET /jobs/:jobId", async () => {
+
+    const token = "dev-user";
 
     const res = await request(app)
       .get(`/jobs/${jobId}`)
       .set("Authorization", `Bearer ${token}`);
 
     expect(res.statusCode).toBe(200);
+
+    expect(res.body.job_id).toBe(jobId);
+    expect(res.body.status).toBe("finished");
+    expect(res.body.progress).toBe(100);
 
   });
 
