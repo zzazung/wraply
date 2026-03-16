@@ -1,0 +1,56 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+# Uncomment the line if you want fastlane to automatically update itself
+# update_fastlane
+
+default_platform(:ios)
+
+platform :ios do
+
+  desc "Wraply iOS release build"
+
+  lane :release do |options|
+
+    scheme = options[:scheme] || ENV["SCHEME"]
+    output_dir = options[:output_dir] || "build"
+    app_id = ENV["BUNDLE_IDENTIFIER"]
+
+    if app_id.nil? || app_id.empty?
+      UI.user_error!("BUNDLE_IDENTIFIER not provided")
+    end
+
+    UI.message("📦 scheme: #{scheme}")
+    UI.message("📁 output: #{output_dir}")
+    UI.message("🆔 bundle: #{app_id}")
+
+    ENV["APP_IDENTIFIER"] = app_id
+
+    cert(
+      development: true
+    )
+
+    sigh(
+      development: true
+    )
+
+    build_ios_app(
+      scheme: scheme,
+      clean: true,
+      export_method: "development",
+      output_directory: output_dir,
+      output_name: "app.ipa"
+    )
+
+  end
+
+end

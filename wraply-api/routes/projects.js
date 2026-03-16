@@ -143,7 +143,7 @@ router.post("/:projectId/builds", async (req, res) => {
       platform,
       packageName,
       appName,
-      url,
+      serviceUrl,
       scheme
     } = req.body || {};
 
@@ -179,7 +179,7 @@ router.post("/:projectId/builds", async (req, res) => {
         packageName,
         safeName,
         appName || null,
-        url || null,
+        serviceUrl || null,
         scheme || null
       ]
     );

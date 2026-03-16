@@ -1,6 +1,7 @@
 import { useEffect,useState } from "react";
 import { useParams } from "react-router-dom";
 
+import PageHeader from "@/components/layout/PageHeader";
 import BuildHeader from "@/components/build/BuildHeader";
 import BuildProgress from "@/components/build/BuildProgress";
 import BuildTimeline from "@/components/build/BuildTimeline";
@@ -8,29 +9,44 @@ import BuildLogViewer from "@/components/build/BuildLogViewer";
 import BuildArtifacts from "@/components/build/BuildArtifacts";
 
 import { getJob } from "@/services/builds";
+import { fetchProject } from "@/services/projects";
+
 import type { BuildJob } from "@/types/build";
+import type { Project } from "@/types/project";
 
 export default function BuildDetailPage(){
 
   const { jobId } = useParams();
 
   const [job,setJob] = useState<BuildJob | null>(null);
+  const [project,setProject] = useState<Project | null>(null);
 
   const [loading,setLoading] = useState(true);
-
   const [error,setError] = useState<string | null>(null);
 
-  async function load(){
+  async function load(isPolling=false){
 
     if(!jobId) return;
 
     try{
 
-      setLoading(true);
+      if(!isPolling){
 
-      const data = await getJob(jobId);
+        setLoading(true);
 
-      setJob(data);
+      }
+
+      const jobData = await getJob(jobId);
+
+      setJob(jobData);
+
+      if(jobData?.project_id && !project){
+
+        const projectData = await fetchProject(jobData.project_id);
+
+        setProject(projectData);
+
+      }
 
     }catch(e){
 
@@ -38,7 +54,11 @@ export default function BuildDetailPage(){
 
     }finally{
 
-      setLoading(false);
+      if(!isPolling){
+
+        setLoading(false);
+
+      }
 
     }
 
@@ -46,9 +66,13 @@ export default function BuildDetailPage(){
 
   useEffect(()=>{
 
-    load();
+    load(false);
 
-    const timer = setInterval(load,5000);
+    const timer = setInterval(()=>{
+
+      load(true);
+
+    },5000);
 
     return ()=>clearInterval(timer);
 
@@ -100,11 +124,27 @@ export default function BuildDetailPage(){
 
     <div className="space-y-6">
 
-      <BuildHeader job={job} />
+      <PageHeader
+        title="빌드 상세"
+        breadcrumbs={[
+          { label:"프로젝트", href:"/projects" },
 
-      <BuildProgress job={job} />
+          ...(project
+            ? [{ label:project.name, href:`/projects/${project.id}` }]
+            : []),
 
-      <BuildTimeline job={job} />
+          { label:"빌드 상세" }
+        ]}
+      />
+
+      <BuildHeader
+        job={job}
+        project={project ?? undefined}
+      />
+
+      <BuildProgress build={job} />
+
+      <BuildTimeline build={job} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 

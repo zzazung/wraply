@@ -1,7 +1,7 @@
 import type { Build } from "@/types/build";
 
 interface Props{
-  build:Build;
+  build?:Build;
 }
 
 interface Step{
@@ -41,6 +41,8 @@ function getStepIndex(status:string){
 
 export default function BuildTimeline({ build }:Props){
 
+  if(!build) return null;
+
   const stepIndex = getStepIndex(build.status);
 
   return(
@@ -53,7 +55,7 @@ export default function BuildTimeline({ build }:Props){
 
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-0">
 
         {STEPS.map((step,index)=>{
 
@@ -145,6 +147,9 @@ function TimelineItem({
 
 }){
 
+  // const height = isLast ? '' : 'h-10';
+  const height = 'h-10';
+
   const dotColor =
 
     state==="done"
@@ -167,15 +172,15 @@ function TimelineItem({
 
   return(
 
-    <div className="flex items-start gap-4">
+    <div className={`flex items-start gap-4 ${height}`}>
 
-      <div className="flex flex-col items-center">
+      <div className="flex flex-col items-center pt-1">
 
         <div className={`w-3 h-3 rounded-full ${dotColor}`} />
 
         {!isLast && (
 
-          <div className="w-px h-6 bg-border" />
+          <div className="w-px h-7 bg-border" />
 
         )}
 
@@ -209,7 +214,7 @@ function FinishItem({
 
     <div className="flex items-start gap-4">
 
-      <div className="flex flex-col items-center">
+      <div className="flex flex-col items-center pt-1">
 
         <div className={`w-3 h-3 rounded-full ${color}`} />
 

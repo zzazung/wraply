@@ -135,8 +135,12 @@ Android signing key 관리
 | safe_name | build safe name |
 | package_name | package id |
 | mode | signing mode |
+| version | signing key version |
+| is_active | active key |
 | keystore_path | keystore file path |
 | keystore_sha256 | keystore fingerprint |
+| fingerprint_sha1 | SHA1 fingerprint |
+| fingerprint_sha256 | SHA256 fingerprint |
 | key_alias | alias |
 | store_pass_enc | encrypted store password |
 | key_pass_enc | encrypted key password |

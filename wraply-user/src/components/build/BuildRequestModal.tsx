@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState,useEffect } from "react";
 
-import { requestBuild } from "@/services/builds";
+import { requestBuild,fetchProjectBuilds,getJob } from "@/services/builds";
+
+import type { BuildJob } from "@/types/build";
 
 export default function BuildRequestModal({
   projectId,
@@ -12,18 +14,79 @@ export default function BuildRequestModal({
   onCreated:(jobId:string)=>void;
 }){
 
-  const [platform,setPlatform] = useState("android");
+  const [platform,setPlatform] = useState<"android"|"ios">("android");
 
   const [appName,setAppName] = useState("");
   const [packageName,setPackageName] = useState("");
-  const [serviceUrl,setServiceUrl] = useState("");
+  const [url,setUrl] = useState("");
   const [scheme,setScheme] = useState("");
 
   const [loading,setLoading] = useState(false);
 
+  /* 마지막 빌드 이력 자동완성 */
+
+  useEffect(()=>{
+
+    async function loadLastBuild(){
+
+      try{
+
+        const builds = await fetchProjectBuilds(projectId);
+
+        if(!builds || builds.length === 0) return;
+
+        const lastJob = builds[0] as BuildJob;
+
+        const jobDetail = await getJob(lastJob.job_id);
+        console.log(jobDetail);
+
+        if(jobDetail.app_name){
+
+          setAppName(jobDetail.app_name);
+
+        }
+
+        if(jobDetail.package_name){
+
+          setPackageName(jobDetail.package_name);
+
+        }
+
+        if(jobDetail.url){
+
+          setUrl(jobDetail.url);
+
+        }
+
+        if(jobDetail.scheme){
+
+          setScheme(jobDetail.scheme);
+
+        }
+
+        if(jobDetail.platform){
+
+          setPlatform(jobDetail.platform);
+
+        }
+
+      }catch{
+
+        /* ignore */
+
+      }
+
+    }
+
+    loadLastBuild();
+
+  },[projectId]);
+
   async function handleBuild(){
 
-    if(!appName || !packageName || !serviceUrl) return;
+    if(!appName || !packageName || !url) return;
+
+    if(platform==="ios" && !scheme) return;
 
     try{
 
@@ -35,7 +98,7 @@ export default function BuildRequestModal({
           platform,
           appName,
           packageName,
-          serviceUrl,
+          url,
           scheme:platform==="ios"?scheme:null
         }
       );
@@ -65,7 +128,7 @@ export default function BuildRequestModal({
 
           <select
             value={platform}
-            onChange={e=>setPlatform(e.target.value)}
+            onChange={e=>setPlatform(e.target.value as "android"|"ios")}
             className="w-full border border-border rounded-md px-3 py-2"
           >
             <option value="android">Android</option>
@@ -87,8 +150,8 @@ export default function BuildRequestModal({
           />
 
           <input
-            value={serviceUrl}
-            onChange={e=>setServiceUrl(e.target.value)}
+            value={url}
+            onChange={e=>setUrl(e.target.value)}
             placeholder="서비스 URL"
             className="w-full border border-border rounded-md px-3 py-2"
           />

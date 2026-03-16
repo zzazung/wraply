@@ -45,7 +45,7 @@ export interface BuildRequestPayload{
 
   packageName:string;
 
-  serviceUrl:string;
+  url:string;
 
   scheme?:string | null;
 
@@ -58,8 +58,11 @@ export async function requestBuild(
 
   const res = await api.post(
 
-    `/projects/${projectId}/builds`,
-    payload
+    "/jobs",
+    {
+      projectId,
+      ...payload
+    }
 
   );
 

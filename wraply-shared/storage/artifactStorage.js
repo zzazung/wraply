@@ -12,9 +12,11 @@ function ensureDir(dir) {
 
 }
 
+/* ---------- job dir ---------- */
+
 function getJobDir(jobId) {
 
-  const dir = path.join(ARTIFACT_ROOT, jobId);
+  const dir = path.join(ARTIFACT_ROOT, platform, jobId);
 
   ensureDir(dir);
 
@@ -22,26 +24,103 @@ function getJobDir(jobId) {
 
 }
 
-function listArtifacts(jobId) {
+/* ---------- version dir ---------- */
+
+function getVersionDir(jobId, version) {
+
+  const dir = path.join(getJobDir(jobId), version);
+
+  ensureDir(dir);
+
+  return dir;
+
+}
+
+/* ---------- list versions ---------- */
+
+function listVersions(jobId) {
 
   const dir = getJobDir(jobId);
 
   if (!fs.existsSync(dir)) return [];
 
-  return fs.readdirSync(dir).map(file => ({
-    file,
-    path: path.join(dir, file)
-  }));
+  return fs
+    .readdirSync(dir)
+    .filter(v =>
+      fs.statSync(path.join(dir, v)).isDirectory()
+    );
 
 }
 
-function getArtifact(jobId, file) {
+/* ---------- list artifacts ---------- */
 
-  const p = path.join(getJobDir(jobId), file);
+function listArtifacts(jobId) {
 
-  if (!fs.existsSync(p)) return null;
+  const jobDir = getJobDir(jobId);
 
-  return p;
+  if (!fs.existsSync(jobDir)) return [];
+
+  const versions = listVersions(jobId);
+
+  const result = [];
+
+  for (const version of versions) {
+
+    const versionDir = path.join(jobDir, version);
+
+    const files = fs.readdirSync(versionDir);
+
+    for (const file of files) {
+
+      result.push({
+        version,
+        file,
+        path: path.join(versionDir, file)
+      });
+
+    }
+
+  }
+
+  return result;
+
+}
+
+/* ---------- get artifact ---------- */
+
+function getArtifact(jobId, file, version = null) {
+
+  const jobDir = getJobDir(jobId);
+
+  if (!fs.existsSync(jobDir)) return null;
+
+  /* version 지정 */
+
+  if (version) {
+
+    const p = path.join(jobDir, version, file);
+
+    if (fs.existsSync(p)) return p;
+
+    return null;
+
+  }
+
+  /* 최신 버전 검색 */
+
+  const versions = listVersions(jobId)
+    .sort()
+    .reverse();
+
+  for (const v of versions) {
+
+    const p = path.join(jobDir, v, file);
+
+    if (fs.existsSync(p)) return p;
+
+  }
+
+  return null;
 
 }
 
@@ -79,8 +158,10 @@ function deleteJobArtifacts(jobId) {
 
 module.exports = {
   listArtifacts,
+  listVersions,
   getArtifact,
   getJobDir,
+  getVersionDir,
   deleteArtifact,
   deleteJobArtifacts
 };

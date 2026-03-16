@@ -6,8 +6,10 @@ const redis =
 const { runBuild } =
   require("./buildWorker");
 
+const { BUILD_QUEUE } = require("@wraply/shared/constants/queues");
+
 const worker = new Worker(
-  "wraply-build",
+  BUILD_QUEUE,
   async job => {
 
     return await runBuild(job.data);

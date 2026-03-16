@@ -1,13 +1,10 @@
-// api/routes/jobs.js
-
 const express = require("express");
 const { v4: uuidv4 } = require("uuid");
 const fs = require("fs");
 const path = require("path");
 
 const { query } = require("@wraply/shared/db");
-
-require("dotenv").config();
+const { enqueueBuild } = require("../queue/buildQueue");
 
 const router = express.Router();
 
@@ -22,13 +19,11 @@ function safeAbsPathFromCiRoot(relPath) {
 
   const normalized = relPath.replace(/\\/g, "/");
 
-  if (normalized.includes(".."))
-    return null;
+  if (normalized.includes("..")) return null;
 
   const abs = path.resolve(CI_ROOT, normalized);
 
-  if (!abs.startsWith(path.resolve(CI_ROOT)))
-    return null;
+  if (!abs.startsWith(path.resolve(CI_ROOT))) return null;
 
   return abs;
 
@@ -40,10 +35,7 @@ function rmrf(absPath) {
 
     if (absPath && fs.existsSync(absPath)) {
 
-      fs.rmSync(absPath, {
-        recursive: true,
-        force: true
-      });
+      fs.rmSync(absPath, { recursive: true, force: true });
 
       return true;
 
@@ -63,7 +55,6 @@ function rmrf(absPath) {
  * Job 생성
  */
 router.post("/", async (req, res) => {
-
   try {
 
     const {
@@ -80,9 +71,7 @@ router.post("/", async (req, res) => {
       typeof platform !== "string" ||
       typeof packageName !== "string"
     ) {
-      return res.status(400).json({
-        error: "Invalid fields"
-      });
+      return res.status(400).json({ error: "Invalid fields" });
     }
 
     const jobId = `job_${uuidv4()}`;
@@ -119,18 +108,15 @@ router.post("/", async (req, res) => {
       ]
     );
 
-    res.json({
-      success: true,
-      jobId
-    });
+    await enqueueBuild({ jobId, platform, safeName, packageName, appName, url });
+
+    res.json({ success: true, jobId });
 
   } catch (e) {
 
     console.error("job create error:", e);
 
-    res.status(500).json({
-      error: String(e)
-    });
+    res.status(500).json({ error: String(e) });
 
   }
 
@@ -195,9 +181,7 @@ router.get("/:jobId", async (req, res) => {
     );
 
     if (!rows.length) {
-      return res.status(404).json({
-        error: "Job not found"
-      });
+      return res.status(404).json({ error: "Job not found" });
     }
 
     res.json(rows[0]);
@@ -238,10 +222,7 @@ router.get("/:jobId/log", async (req, res) => {
     if (!fs.existsSync(abs))
       return res.status(404).json({ error: "Log file missing" });
 
-    res.setHeader(
-      "Content-Type",
-      "text/plain; charset=utf-8"
-    );
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
 
     fs.createReadStream(abs).pipe(res);
 
@@ -373,11 +354,8 @@ router.delete("/", async (req, res) => {
 
     for (const r of rows) {
 
-      const artifactAbs =
-        safeAbsPathFromCiRoot(r.artifact_dir);
-
-      const logAbs =
-        safeAbsPathFromCiRoot(r.log_path);
+      const artifactAbs = safeAbsPathFromCiRoot(r.artifact_dir);
+      const logAbs = safeAbsPathFromCiRoot(r.log_path);
 
       if (artifactAbs && rmrf(artifactAbs))
         deletedFiles.push({ jobId: r.job_id });

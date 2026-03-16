@@ -1,5 +1,7 @@
 import { useEffect,useState } from "react";
 
+import PageHeader from "@/components/layout/PageHeader";
+
 import { fetchProjects } from "@/services/projects";
 
 import type { Project } from "@/types/project";
@@ -26,11 +28,15 @@ export default function DashboardPage(){
 
     <div className="space-y-6">
 
-      <h1 className="text-2xl font-semibold">
+      {/* <h1 className="text-2xl font-semibold">
 
         대시보드
 
-      </h1>
+      </h1> */}
+
+      <PageHeader
+        title="대시보드"
+      />
 
       <div
         className="

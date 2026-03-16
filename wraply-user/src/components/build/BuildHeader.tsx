@@ -8,7 +8,7 @@ export default function BuildHeader({
 
 }:{
 
-  job:BuildJob
+  job:BuildJob;
 
 }){
 
@@ -19,12 +19,6 @@ export default function BuildHeader({
       <div className="flex items-center justify-between">
 
         <div>
-
-          <h1 className="text-xl font-semibold">
-
-            빌드 상세
-
-          </h1>
 
           <div className="text-sm text-muted-foreground mt-1">
 

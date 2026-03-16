@@ -1,18 +1,19 @@
 #!/bin/bash
 set -euo pipefail
 
-SAFE_NAME="${1:-}"
-PACKAGE_NAME="${2:-}"
-APP_NAME="${3:-}"
-SERVICE_URL="${4:-}"
+JOB_ID="${1:-}"
+SAFE_NAME="${2:-}"
+PACKAGE_NAME="${3:-}"
+APP_NAME="${4:-}"
+SERVICE_URL="${5:-}"
 
-if [[ -z "$SAFE_NAME" || -z "$PACKAGE_NAME" || -z "$APP_NAME" || -z "$SERVICE_URL" ]]; then
-  echo "❌ Usage: ./patch_android.sh <safe_name> <package_name> <app_name> <service_url>"
+if [[ -z "$JOB_ID" || -z "$SAFE_NAME" || -z "$PACKAGE_NAME" || -z "$APP_NAME" || -z "$SERVICE_URL" ]]; then
+  echo "❌ Usage: ./patch_android.sh <job_id> <safe_name> <package_name> <app_name> <service_url>"
   exit 1
 fi
 
 CI_ROOT="$(pwd)"
-SRC="$CI_ROOT/projects/android/$SAFE_NAME/source"
+SRC="$CI_ROOT/projects/android/$SAFE_NAME/$JOB_ID/source"
 
 if [[ ! -d "$SRC" ]]; then
   echo "❌ Project not found: $SRC"

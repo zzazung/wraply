@@ -1,6 +1,7 @@
 import { useEffect,useState } from "react";
 import { useParams } from "react-router-dom";
 
+import PageHeader from "@/components/layout/PageHeader";
 import ProjectHeader from "@/components/projects/ProjectHeader";
 import BuildLauncher from "@/components/build/BuildLauncher";
 import BuildHistoryTable from "@/components/build/BuildHistoryTable";
@@ -102,6 +103,14 @@ export default function ProjectDetailPage(){
   return(
 
     <div className="space-y-6">
+
+      <PageHeader
+        title={project.name}
+        breadcrumbs={[
+          { label:"프로젝트", href:"/projects" },
+          { label:project.name }
+        ]}
+      />
 
       <ProjectHeader project={project} />
 

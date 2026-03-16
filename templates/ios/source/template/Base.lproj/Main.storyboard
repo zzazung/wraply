@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="23727" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="BLC-gK-r6j">
+    <device id="retina6_12" orientation="portrait" appearance="light"/>
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="23721"/>
+        <capability name="Named colors" minToolsVersion="9.0"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="System colors in document resources" minToolsVersion="11.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <!--View Controller-->
+        <scene sceneID="tne-QT-ifu">
+            <objects>
+                <viewController id="BYZ-38-t0r" customClass="ViewController" customModule="template" customModuleProvider="target" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="8bC-Xf-vdC">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
+                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                    </view>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="dkx-z0-nzr" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="866" y="5"/>
+        </scene>
+        <!--Splash Controller-->
+        <scene sceneID="Fdn-ae-6ZH">
+            <objects>
+                <viewController storyboardIdentifier="Controller.Splash" id="BLC-gK-r6j" customClass="SplashController" customModule="template" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="f3H-aQ-vWd">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="center" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="splash" translatesAutoresizingMaskIntoConstraints="NO" id="WT5-oh-Ux2">
+                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                                <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                            </imageView>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="gIX-aF-jsq"/>
+                        <color key="backgroundColor" name="dp0"/>
+                        <constraints>
+                            <constraint firstItem="WT5-oh-Ux2" firstAttribute="top" secondItem="f3H-aQ-vWd" secondAttribute="top" id="2Th-CZ-ToF"/>
+                            <constraint firstAttribute="bottom" secondItem="WT5-oh-Ux2" secondAttribute="bottom" id="8Yf-sR-AVb"/>
+                            <constraint firstAttribute="trailing" secondItem="WT5-oh-Ux2" secondAttribute="trailing" id="beL-81-bkX"/>
+                            <constraint firstItem="WT5-oh-Ux2" firstAttribute="leading" secondItem="f3H-aQ-vWd" secondAttribute="leading" id="vsy-4b-ybK"/>
+                        </constraints>
+                    </view>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="ZdH-gI-VDr" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="42" y="5"/>
+        </scene>
+        <!--Web View Controller-->
+        <scene sceneID="1Pq-JB-1g8">
+            <objects>
+                <viewController storyboardIdentifier="Controller.WebView" id="ERV-cp-smg" customClass="WebViewController" customModule="template" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="rWX-fF-A8G">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <viewLayoutGuide key="safeArea" id="dul-xo-rKq"/>
+                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                    </view>
+                    <navigationItem key="navigationItem" id="6tp-28-ewO"/>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="gnb-xt-gdO" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="1680" y="5"/>
+        </scene>
+    </scenes>
+    <resources>
+        <image name="splash" width="360" height="800"/>
+        <namedColor name="dp0">
+            <color red="0.32899999618530273" green="0.32400000095367432" blue="0.4779999852180481" alpha="0.33000001311302185" colorSpace="custom" customColorSpace="sRGB"/>
+        </namedColor>
+        <systemColor name="systemBackgroundColor">
+            <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+        </systemColor>
+    </resources>
+</document>

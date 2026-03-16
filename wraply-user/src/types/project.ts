@@ -10,7 +10,7 @@ export interface Project {
 
   appName:string;
 
-  serviceUrl:string;
+  url:string;
 
   packageName:string;
 

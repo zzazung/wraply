@@ -64,7 +64,7 @@ export default function ProjectCard({
 
       <div className="text-xs text-muted-foreground break-all">
 
-        {project.serviceUrl}
+        {project.url}
 
       </div>
 

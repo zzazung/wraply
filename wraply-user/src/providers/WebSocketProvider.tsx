@@ -1,8 +1,14 @@
 import { createContext,useEffect,useRef } from "react";
-
 import { useBuildStore } from "@/stores/buildStore";
 
 const WSContext = createContext<WebSocket | null>(null);
+
+function normalizeStatus(status:string){
+
+  if(status==="finished") return "success";
+  return status;
+
+}
 
 export function WebSocketProvider({ children }:{ children:React.ReactNode }){
 
@@ -29,7 +35,14 @@ export function WebSocketProvider({ children }:{ children:React.ReactNode }){
         const data = JSON.parse(event.data);
 
         if(data.type==="build-status"){
-          updateBuild(data.payload);
+
+          const payload = {
+            ...data.payload,
+            status:normalizeStatus(data.payload.status)
+          };
+
+          updateBuild(payload);
+
         }
 
         if(data.type==="build-log"){
@@ -61,7 +74,6 @@ export function WebSocketProvider({ children }:{ children:React.ReactNode }){
     return ()=>{
 
       reconnectRef.current = false;
-
       ws?.close();
 
     };

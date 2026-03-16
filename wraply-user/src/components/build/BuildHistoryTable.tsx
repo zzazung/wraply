@@ -1,33 +1,46 @@
-import { Link } from "react-router-dom";
-
+import { Link, useNavigate } from "react-router-dom";
 import BuildStatusBadge from "@/components/build/BuildStatusBadge";
-
 import { formatDate } from "@/utils/formatDate";
-
 import type { BuildJob } from "@/types/build";
 
+function normalizeStatus(status:string){
+
+  if(status==="finished") return "success";
+
+  if(
+    status==="preparing"||
+    status==="patching"||
+    status==="building"||
+    status==="signing"||
+    status==="uploading"
+  ){
+    return "running";
+  }
+
+  return status;
+
+}
+
 export default function BuildHistoryTable({
-
   builds
-
 }:{
-
   builds:BuildJob[]
-
 }){
 
-  if(builds.length === 0){
+  const navigate = useNavigate();
+
+  if(builds.length===0){
 
     return(
-
       <div className="bg-card border border-border rounded-lg p-6 text-sm text-muted-foreground">
-
         아직 빌드 기록이 없습니다.
-
       </div>
-
     );
 
+  }
+
+  function openBuild(jobId:string){
+    navigate(`/builds/${jobId}`);
   }
 
   return(
@@ -57,26 +70,30 @@ export default function BuildHistoryTable({
           {builds.map(job=>(
 
             <tr
-              key={job.id}
-              className="border-t border-border hover:bg-muted/50 transition"
+              key={job.job_id}
+              onClick={()=>openBuild(job.job_id)}
+              className="border-t border-border hover:bg-muted/50 transition cursor-pointer"
             >
 
               <td className="px-4 py-3">
 
-                <Link
-                  to={`/builds/${job.id}`}
+                {/* <Link
+                  to={`/builds/${job.job_id}`}
+                  onClick={(e)=>e.stopPropagation()}
                   className="text-primary hover:underline"
-                >
+                > */}
 
-                  {job.id}
+                  {job.job_id}
 
-                </Link>
+                {/* </Link> */}
 
               </td>
 
               <td className="px-4 py-3">
 
-                <BuildStatusBadge status={job.status} />
+                <BuildStatusBadge
+                  status={normalizeStatus(job.status)}
+                />
 
               </td>
 
@@ -88,7 +105,7 @@ export default function BuildHistoryTable({
 
               <td className="px-4 py-3 text-muted-foreground">
 
-                {formatDate(job.createdAt)}
+                {formatDate(job.created_at)}
 
               </td>
 

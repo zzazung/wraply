@@ -7,7 +7,7 @@ export interface CreateProjectPayload {
 
   name:string;
 
-  serviceUrl:string;
+  url:string;
 
   platform:"android" | "ios";
 

@@ -3,10 +3,12 @@ import type { Build } from "@/types/build";
 import { getBuildProgress } from "@/utils/buildProgress";
 
 interface Props{
-  build:Build;
+  build?:Build;
 }
 
 export default function BuildProgress({ build }:Props){
+
+  if(!build) return null;
 
   const progress = getBuildProgress(build.status);
 

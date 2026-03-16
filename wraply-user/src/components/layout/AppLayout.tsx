@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 
 import Sidebar from "./Sidebar";
 import Header from "./Header";
+import Breadcrumb from "./Breadcrumb";
 
 export default function AppLayout(){
 
@@ -15,7 +16,9 @@ export default function AppLayout(){
 
         <Header />
 
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 space-y-4">
+
+          <Breadcrumb />
 
           <Outlet />
 

@@ -45,6 +45,7 @@ const TRANSITIONS = {
 
   building: [
     STATES.SIGNING,
+    STATES.UPLOADING,
     STATES.FAILED
   ],
 
@@ -120,6 +121,36 @@ function getProgress(status) {
 
     default:
       return 0
+
+  }
+
+}
+
+/**
+ * UI 상태 매핑
+ */
+function getUIStatus(status) {
+
+  switch (status) {
+
+    case STATES.QUEUED:
+      return "queued"
+
+    case STATES.PREPARING:
+    case STATES.PATCHING:
+    case STATES.BUILDING:
+    case STATES.SIGNING:
+    case STATES.UPLOADING:
+      return "running"
+
+    case STATES.FINISHED:
+      return "success"
+
+    case STATES.FAILED:
+      return "failed"
+
+    default:
+      return "queued"
 
   }
 

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import { fetchProjectBuilds } from "@/services/builds";
 
+import PageHeader from "@/components/layout/PageHeader";
 import BuildStatusBadge from "@/components/build/BuildStatusBadge";
 import Spinner from "@/components/ui/Spinner";
 
@@ -80,11 +81,18 @@ function Header(){
 
       <div>
 
-        <h1 className="text-2xl font-semibold">
+        {/* <h1 className="text-2xl font-semibold">
 
           빌드 센터
 
-        </h1>
+        </h1> */}
+
+        <PageHeader
+          title="빌드 센터"
+          breadcrumbs={[
+            { label:"빌드 센터" }
+          ]}
+        />
 
         <div className="text-sm text-muted-foreground">
 

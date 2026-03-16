@@ -3,3 +3,9 @@ node_modules/
 .env.local
 .env.test
 github personal access token.txt
+artifacts/
+builds/
+logs/
+signing/
+wraply-admin/.next/
+wraply-worker/templates/

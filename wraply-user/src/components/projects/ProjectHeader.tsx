@@ -15,15 +15,15 @@ export default function ProjectHeader({
 
     <div className="bg-card border border-border rounded-lg p-6 space-y-3">
 
-      <div className="text-xl font-semibold">
+      {/* <div className="text-xl font-semibold">
 
         {project.name}
 
-      </div>
+      </div> */}
 
       <div className="text-sm text-muted-foreground">
 
-        {project.serviceUrl}
+        {project.url}
 
       </div>
 

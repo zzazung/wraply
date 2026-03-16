@@ -5,7 +5,7 @@ const services = {
   api: ["pnpm", ["--filter", "wraply-api", "dev"]],
   worker: ["pnpm", ["--filter", "wraply-worker", "dev"]],
   scheduler: ["pnpm", ["--filter", "wraply-scheduler", "dev"]],
-  admin: ["pnpm", ["--filter", "wraply-admin", "dev"]],
+  // admin: ["pnpm", ["--filter", "wraply-admin", "dev"]],
   user: ["pnpm", ["--filter", "wraply-user", "dev"]]
 
 }

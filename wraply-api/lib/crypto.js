@@ -1,7 +1,10 @@
 // lib/crypto.js
 const crypto = require("crypto");
 
-require("dotenv").config();
+const path = require("path");
+require("dotenv").config({
+  path: path.resolve(__dirname, "../.env")
+});
 
 const WRAPLY_SECRET_KEY = process.env.WRAPLY_SECRET_KEY;
 

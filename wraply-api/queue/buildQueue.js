@@ -1,15 +1,18 @@
+const path = require("path");
+require("dotenv").config({
+  path: path.resolve(__dirname, "../.env")
+});
+
 const { Queue } = require("bullmq");
 const redis = require("@wraply/shared/redis");
 
-require("dotenv").config();
-
-const QUEUE_NAME = "build";
+const { BUILD_QUEUE } = require("@wraply/shared/constants/queues");
 
 /**
  * Build Queue
  */
 const buildQueue = new Queue(
-  QUEUE_NAME,
+  BUILD_QUEUE,
   {
     connection: redis,
     defaultJobOptions: {
@@ -39,6 +42,7 @@ buildQueue.on("failed", (job, err) => {
  * enqueue build job
  */
 async function enqueueBuild(data) {
+  console.log('enqueueBuild', data);
 
   if (!data || typeof data !== "object") {
     throw new Error("invalid build job payload");
@@ -49,7 +53,7 @@ async function enqueueBuild(data) {
   }
 
   const job = await buildQueue.add(
-    QUEUE_NAME,
+    BUILD_QUEUE,
     data,
     { jobId: data.jobId }
   );

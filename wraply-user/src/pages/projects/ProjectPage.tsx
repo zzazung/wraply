@@ -1,5 +1,6 @@
 import { useEffect,useState } from "react";
 
+import PageHeader from "@/components/layout/PageHeader";
 import ProjectCard from "@/components/projects/ProjectCard";
 import ProjectCreateModal from "@/components/projects/ProjectCreateModal";
 
@@ -47,11 +48,18 @@ export default function ProjectPage(){
 
         <div>
 
-          <h1 className="text-2xl font-semibold">
+          {/* <h1 className="text-2xl font-semibold">
 
             프로젝트 관리
 
-          </h1>
+          </h1> */}
+
+          <PageHeader
+            title="프로젝트"
+            breadcrumbs={[
+              { label:"프로젝트" }
+            ]}
+          />
 
           <div className="text-sm text-muted-foreground mt-1">
 
