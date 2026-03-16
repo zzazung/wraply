@@ -9,7 +9,7 @@ logs/
 signing/
 wraply-admin/.next/
 wraply-worker/templates/
-wraply-worker/*.cer
-wraply-worker/*.certSigningRequest
-wraply-worker/*.p12
-wraply-worker/*.mobileprovision
+*.cer
+*.certSigningRequest
+*.p12
+*.mobileprovision
