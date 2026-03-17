@@ -11,7 +11,7 @@ signing/
 templates/
 wraply-admin/.next/
 wraply-worker/templates/
-**.cer
+*.cer
 *.certSigningRequest
 *.p12
 *.mobileprovision
