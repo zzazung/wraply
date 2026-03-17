@@ -8,6 +8,7 @@ builds/
 logs/
 projects/
 signing/
+templates/
 wraply-admin/.next/
 wraply-worker/templates/
 *.cer
