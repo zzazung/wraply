@@ -6,6 +6,7 @@ github personal access token.txt
 artifacts/
 builds/
 logs/
+projects/
 signing/
 wraply-admin/.next/
 wraply-worker/templates/
