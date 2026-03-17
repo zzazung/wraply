@@ -1,0 +1,20 @@
+current directory: /Volumes/EoMacExter1/wraply/projects/android/com_wraply_app/job_397145f9-1f02-4ed5-a74d-1e7c16657e2c/source/vendor/bundle/ruby/3.2.0/gems/sysrandom-1.0.5/ext/sysrandom
+/Users/eo3/.rbenv/versions/3.2.2/bin/ruby extconf.rb
+creating Makefile
+
+current directory: /Volumes/EoMacExter1/wraply/projects/android/com_wraply_app/job_397145f9-1f02-4ed5-a74d-1e7c16657e2c/source/vendor/bundle/ruby/3.2.0/gems/sysrandom-1.0.5/ext/sysrandom
+make DESTDIR\= sitearchdir\=./.gem.20260317-86921-fgjbty sitelibdir\=./.gem.20260317-86921-fgjbty clean
+
+current directory: /Volumes/EoMacExter1/wraply/projects/android/com_wraply_app/job_397145f9-1f02-4ed5-a74d-1e7c16657e2c/source/vendor/bundle/ruby/3.2.0/gems/sysrandom-1.0.5/ext/sysrandom
+make DESTDIR\= sitearchdir\=./.gem.20260317-86921-fgjbty sitelibdir\=./.gem.20260317-86921-fgjbty
+compiling randombytes_sysrandom.c
+compiling sysrandom_ext.c
+linking shared-object sysrandom_ext.bundle
+ld: warning: ignoring duplicate libraries: '-lruby.3.2'
+
+current directory: /Volumes/EoMacExter1/wraply/projects/android/com_wraply_app/job_397145f9-1f02-4ed5-a74d-1e7c16657e2c/source/vendor/bundle/ruby/3.2.0/gems/sysrandom-1.0.5/ext/sysrandom
+make DESTDIR\= sitearchdir\=./.gem.20260317-86921-fgjbty sitelibdir\=./.gem.20260317-86921-fgjbty install
+/usr/bin/install -c -m 0755 sysrandom_ext.bundle ./.gem.20260317-86921-fgjbty
+
+current directory: /Volumes/EoMacExter1/wraply/projects/android/com_wraply_app/job_397145f9-1f02-4ed5-a74d-1e7c16657e2c/source/vendor/bundle/ruby/3.2.0/gems/sysrandom-1.0.5/ext/sysrandom
+make DESTDIR\= sitearchdir\=./.gem.20260317-86921-fgjbty sitelibdir\=./.gem.20260317-86921-fgjbty clean

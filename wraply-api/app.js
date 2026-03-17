@@ -3,7 +3,6 @@ const path = require("path");
 const cors = require("cors");
 
 const authRoutes = require("./routes/auth");
-const userRoutes = require("./routes/users");
 const projectRoutes = require("./routes/projects");
 const jobsRouter = require("./routes/jobs");
 const artifactRoutes = require("./routes/artifacts");
@@ -62,7 +61,6 @@ app.use(
 );
 
 app.use("/auth", authRoutes);
-app.use("/users", userRoutes);
 app.use("/projects", projectRoutes);
 app.use("/jobs", jobsRouter);
 app.use("/artifacts", artifactRoutes);

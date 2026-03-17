@@ -1,5 +1,3 @@
-// api/routes/artifacts.js
-
 const express = require("express");
 const { query } = require("@wraply/shared/db");
 
@@ -9,18 +7,21 @@ router.get("/:artifactId", async (req, res) => {
 
   try {
 
+    const { tenantId } = req.user;
+
     const rows = await query(
       `
       SELECT
         id,
+        tenant_id,
         platform,
         path,
         size,
         created_at
       FROM artifacts
-      WHERE id=?
+      WHERE id=? AND tenant_id=?
       `,
-      [req.params.artifactId]
+      [req.params.artifactId, tenantId]
     );
 
     if (!rows.length)
@@ -30,6 +31,7 @@ router.get("/:artifactId", async (req, res) => {
 
     res.json({
       id: a.id,
+      tenant_id: a.tenant_id,
       platform: a.platform,
       downloadUrl: `/downloads/${a.path}`,
       size: a.size,

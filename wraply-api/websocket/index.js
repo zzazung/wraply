@@ -2,6 +2,12 @@ const WebSocket = require("ws");
 const redis = require("@wraply/shared/redis");
 const { query } = require("@wraply/shared/db");
 
+const {
+  LOG_CHANNEL,
+  STATUS_CHANNEL,
+  HEARTBEAT_CHANNEL
+} = require("@wraply/shared/constants/queues");
+
 const jobClients = new Map();
 
 let wss = null;
@@ -44,7 +50,7 @@ function broadcast(jobId, payload) {
 }
 
 /* --------------------------------------------------
-   broadcast helpers (tests compatibility)
+   broadcast helpers
 -------------------------------------------------- */
 
 function broadcastLog(jobId, message) {
@@ -74,13 +80,13 @@ function broadcastStatus(jobId, status, progress) {
    heartbeat update
 -------------------------------------------------- */
 
-async function updateHeartbeat(jobId) {
+async function updateHeartbeat(jobId, tenantId) {
 
   try {
 
     await query(
-      "UPDATE jobs SET heartbeat_at = NOW() WHERE job_id = ?",
-      [jobId]
+      "UPDATE jobs SET heartbeat_at = NOW() WHERE job_id=? AND tenant_id=?",
+      [jobId, tenantId]
     );
 
   } catch (err) {
@@ -101,13 +107,11 @@ function initRedisSubscriber() {
 
   redisSub = redis.duplicate();
 
-  const channels = [
-    "wraply:logs",
-    "wraply:status",
-    "wraply:heartbeat"
-  ];
-
-  redisSub.subscribe(...channels);
+  redisSub.subscribe(
+    LOG_CHANNEL,
+    STATUS_CHANNEL,
+    HEARTBEAT_CHANNEL
+  );
 
   redisSub.on("ready", () => {
     console.log("Redis subscriber ready");
@@ -134,17 +138,17 @@ function initRedisSubscriber() {
 
     if (!data || !data.jobId) return;
 
-    if (channel === "wraply:heartbeat") {
-      await updateHeartbeat(data.jobId);
+    if (channel === HEARTBEAT_CHANNEL) {
+      await updateHeartbeat(data.jobId, data.tenantId);
       return;
     }
 
-    if (channel === "wraply:logs") {
+    if (channel === LOG_CHANNEL) {
       broadcastLog(data.jobId, data.message);
       return;
     }
 
-    if (channel === "wraply:status") {
+    if (channel === STATUS_CHANNEL) {
       broadcastStatus(data.jobId, data.status, data.progress);
     }
 
@@ -167,14 +171,26 @@ function startWebSocket(server) {
 
   initRedisSubscriber();
 
-  wss.on("connection", (ws, req) => {
+  wss.on("connection", async (ws, req) => {
 
     try {
 
       const url = new URL(req.url, "http://localhost");
-      const jobId = url.searchParams.get("jobId");
 
-      if (!jobId) {
+      const jobId = url.searchParams.get("jobId");
+      const tenantId = url.searchParams.get("tenantId");
+
+      if (!jobId || !tenantId) {
+        ws.close();
+        return;
+      }
+
+      const rows = await query(
+        "SELECT tenant_id FROM jobs WHERE job_id=? LIMIT 1",
+        [jobId]
+      );
+
+      if (!rows.length || rows[0].tenant_id !== tenantId) {
         ws.close();
         return;
       }

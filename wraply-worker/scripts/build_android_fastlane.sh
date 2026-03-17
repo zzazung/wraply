@@ -7,6 +7,13 @@ PACKAGE_NAME="${3:-}"
 APP_NAME="${4:-}"
 URL="${5:-}"
 
+echo "===== BUILD SCRIPT START ====="
+echo "JOB_ID=$JOB_ID"
+echo "SAFE_NAME=$SAFE_NAME"
+echo "PACKAGE_NAME=$PACKAGE_NAME"
+echo "APP_NAME=$APP_NAME"
+echo "URL=$URL"
+
 if [[ -z "$JOB_ID" || -z "$SAFE_NAME" || -z "$PACKAGE_NAME" || -z "$APP_NAME" || -z "$URL" ]]; then
   echo "❌ Usage: ./build_android_fastlane.sh <job_id> <safe_name> <package_name> <app_name> <url>"
   exit 1
@@ -18,10 +25,6 @@ CI_ROOT="$(cd "$WORKER_ROOT/.." && pwd)"
 
 PROJECT_DIR="$CI_ROOT/projects/android/$SAFE_NAME/$JOB_ID/source"
 mkdir -p "$CI_ROOT/projects/android/$SAFE_NAME/$JOB_ID"
-
-# -------------------------------------------------------------------
-# 0) 임시 로그 경로
-# -------------------------------------------------------------------
 
 TMP_OUT="$CI_ROOT/builds/android/$SAFE_NAME/_tmp_$JOB_ID"
 mkdir -p "$TMP_OUT"
@@ -36,11 +39,9 @@ LOG_FILE=""
 finalize_logs() {
 
   if [[ -n "${OUT_DIR:-}" && -d "${OUT_DIR:-}" ]]; then
-
-    [[ -f "$SYNC_LOG" ]]  && mv "$SYNC_LOG"  "$OUT_DIR/sync.log"  2>/dev/null || true
+    [[ -f "$SYNC_LOG" ]]  && mv "$SYNC_LOG"  "$OUT_DIR/sync.log" 2>/dev/null || true
     [[ -f "$PATCH_LOG" ]] && mv "$PATCH_LOG" "$OUT_DIR/patch.log" 2>/dev/null || true
     [[ -f "$BUILD_LOG" ]] && mv "$BUILD_LOG" "$OUT_DIR/build.log" 2>/dev/null || true
-
   fi
 
 }
@@ -49,11 +50,7 @@ cleanup_tmp() {
   rm -rf "$TMP_OUT" 2>/dev/null || true
 }
 
-on_exit() {
-  finalize_logs
-}
-
-trap on_exit EXIT
+trap finalize_logs EXIT
 
 # -------------------------------------------------------------------
 # 1) template sync
@@ -61,12 +58,7 @@ trap on_exit EXIT
 
 echo "WRAPLY_STATE=PREPARING"
 
-"$SCRIPT_DIR/sync_from_templates.sh" \
-  --platform android \
-  --safe "$SAFE_NAME" \
-  --job "$JOB_ID" \
-  --ci-root "$CI_ROOT" \
-  --log "$SYNC_LOG"
+"$SCRIPT_DIR/sync_from_templates.sh" --platform android --safe "$SAFE_NAME" --job "$JOB_ID" --ci-root "$CI_ROOT" --log "$SYNC_LOG"
 
 # -------------------------------------------------------------------
 # 2) patch project
@@ -129,23 +121,14 @@ fi
 VERSION_NAME="$(grep -E 'versionName' "$GRADLE_FILE" | head -n1 | sed -E 's/.*["= ]+([^"]+)["]?.*/\1/' || true)"
 VERSION_CODE="$(grep -E 'versionCode' "$GRADLE_FILE" | head -n1 | grep -oE '[0-9]+' || true)"
 
-# fallback (매우 중요)
-
-if [[ -z "$VERSION_NAME" ]]; then
-  VERSION_NAME="0.0.0"
-fi
-
-if [[ -z "$VERSION_CODE" ]]; then
-  VERSION_CODE="0"
-fi
+[[ -z "$VERSION_NAME" ]] && VERSION_NAME="0.0.0"
+[[ -z "$VERSION_CODE" ]] && VERSION_CODE="0"
 
 VERSION="${VERSION_NAME}_${VERSION_CODE}"
 
 OUT_DIR="$CI_ROOT/builds/android/$SAFE_NAME/$VERSION"
-
 mkdir -p "$OUT_DIR"
 
-# worker에 version 전달 (중요)
 echo "OUTPUT_DIR=builds/android/$SAFE_NAME/$VERSION"
 
 finalize_logs
@@ -172,9 +155,14 @@ if [[ ! -f "fastlane/Fastfile" ]]; then
   exit 1
 fi
 
-bundle exec fastlane android release
+echo "📦 Installing Ruby gems"
 
-echo "WRAPLY_STATE=SIGNING"
+bundle config set path vendor/bundle
+bundle install
+
+echo "🚀 Running Fastlane"
+
+bundle exec fastlane android release
 
 # -------------------------------------------------------------------
 # 6) build outputs 탐색
@@ -196,10 +184,6 @@ if [[ -z "$AAB_SRC" && -z "$APK_SRC" ]]; then
   exit 1
 fi
 
-# -------------------------------------------------------------------
-# 7) outputs copy + artifact 이벤트 전달
-# -------------------------------------------------------------------
-
 if [[ -n "$AAB_SRC" ]]; then
   cp "$AAB_SRC" "$OUT_DIR/app-release.aab"
   echo "WRAPLY_ARTIFACT=$OUT_DIR/app-release.aab"
@@ -210,14 +194,8 @@ if [[ -n "$APK_SRC" ]]; then
   echo "WRAPLY_ARTIFACT=$OUT_DIR/app-release.apk"
 fi
 
-# -------------------------------------------------------------------
-# 8) tmp cleanup
-# -------------------------------------------------------------------
-
 cleanup_tmp
 
 echo "WRAPLY_STATE=FINISHED"
 
 echo "✅ Build completed"
-
-# echo "OUTPUT_DIR=builds/android/$SAFE_NAME/${VERSION_NAME}_${VERSION_CODE}"

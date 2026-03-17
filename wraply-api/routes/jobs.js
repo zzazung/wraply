@@ -5,8 +5,13 @@ const path = require("path");
 
 const { query } = require("@wraply/shared/db");
 const { enqueueBuild } = require("../queue/buildQueue");
+const { CANCEL_CHANNEL } = require("@wraply/shared/constants/queues");
+
+const { requireAuth } = require("../middleware/auth");
 
 const router = express.Router();
+
+router.use(requireAuth);
 
 const CI_ROOT = process.env.CI_ROOT || process.cwd();
 
@@ -57,6 +62,8 @@ function rmrf(absPath) {
 router.post("/", async (req, res) => {
   try {
 
+    const { tenantId } = req.user;
+
     const {
       projectId,
       platform,
@@ -82,6 +89,7 @@ router.post("/", async (req, res) => {
       INSERT INTO jobs
       (
         job_id,
+        tenant_id,
         project_id,
         platform,
         package_name,
@@ -94,10 +102,11 @@ router.post("/", async (req, res) => {
         worker_id,
         build_host
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0, NULL, NULL)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0, NULL, NULL)
       `,
       [
         jobId,
+        tenantId,
         projectId,
         platform,
         packageName,
@@ -108,7 +117,16 @@ router.post("/", async (req, res) => {
       ]
     );
 
-    await enqueueBuild({ jobId, platform, safeName, packageName, appName, url });
+    await enqueueBuild({
+      jobId,
+      tenantId,
+      projectId,
+      platform,
+      packageName,
+      safeName,
+      appName,
+      url
+    });
 
     res.json({ success: true, jobId });
 
@@ -129,10 +147,13 @@ router.get("/", async (req, res) => {
 
   try {
 
+    const { tenantId } = req.user;
+
     const rows = await query(
       `
       SELECT
         job_id,
+        tenant_id,
         project_id,
         platform,
         package_name,
@@ -149,9 +170,11 @@ router.get("/", async (req, res) => {
         finished_at,
         error_reason
       FROM jobs
+      WHERE tenant_id=?
       ORDER BY created_at DESC
       LIMIT 100
-      `
+      `,
+      [tenantId]
     );
 
     res.json({ items: rows });
@@ -173,11 +196,12 @@ router.get("/:jobId", async (req, res) => {
 
   try {
 
+    const { tenantId } = req.user;
     const { jobId } = req.params;
 
     const rows = await query(
-      `SELECT * FROM jobs WHERE job_id=? LIMIT 1`,
-      [jobId]
+      `SELECT * FROM jobs WHERE job_id=? AND tenant_id=? LIMIT 1`,
+      [jobId, tenantId]
     );
 
     if (!rows.length) {
@@ -203,11 +227,12 @@ router.get("/:jobId/log", async (req, res) => {
 
   try {
 
+    const { tenantId } = req.user;
     const { jobId } = req.params;
 
     const rows = await query(
-      `SELECT log_path FROM jobs WHERE job_id=?`,
-      [jobId]
+      `SELECT log_path FROM jobs WHERE job_id=? AND tenant_id=?`,
+      [jobId, tenantId]
     );
 
     if (!rows.length || !rows[0].log_path)
@@ -243,6 +268,7 @@ router.get("/:jobId/artifacts", async (req, res) => {
 
   try {
 
+    const { tenantId } = req.user;
     const { jobId } = req.params;
 
     const rows = await query(
@@ -255,9 +281,9 @@ router.get("/:jobId/artifacts", async (req, res) => {
         size,
         created_at
       FROM artifacts
-      WHERE job_id=?
+      WHERE job_id=? AND tenant_id=?
       `,
-      [jobId]
+      [jobId, tenantId]
     );
 
     const items = rows
@@ -290,11 +316,12 @@ router.post("/:jobId/cancel", async (req, res) => {
 
   try {
 
+    const { tenantId } = req.user;
     const { jobId } = req.params;
 
     const rows = await query(
-      `SELECT status FROM jobs WHERE job_id=?`,
-      [jobId]
+      `SELECT status FROM jobs WHERE job_id=? AND tenant_id=?`,
+      [jobId, tenantId]
     );
 
     if (!rows.length)
@@ -309,8 +336,8 @@ router.post("/:jobId/cancel", async (req, res) => {
     const redis = require("../lib/redis");
 
     await redis.publish(
-      "wraply:cancel",
-      JSON.stringify({ jobId })
+      CANCEL_CHANNEL,
+      JSON.stringify({ jobId, tenantId })
     );
 
     res.json({ success: true });
@@ -330,6 +357,8 @@ router.post("/:jobId/cancel", async (req, res) => {
  */
 router.delete("/", async (req, res) => {
 
+  const { tenantId } = req.user;
+
   const jobIds = Array.isArray(req.body?.jobIds)
     ? req.body.jobIds
     : [];
@@ -345,9 +374,9 @@ router.delete("/", async (req, res) => {
       `
       SELECT job_id, artifact_dir, log_path
       FROM jobs
-      WHERE job_id IN (${placeholders})
+      WHERE tenant_id=? AND job_id IN (${placeholders})
       `,
-      jobIds
+      [tenantId, ...jobIds]
     );
 
     const deletedFiles = [];
@@ -368,9 +397,9 @@ router.delete("/", async (req, res) => {
     const delJobs = await query(
       `
       DELETE FROM jobs
-      WHERE job_id IN (${placeholders})
+      WHERE tenant_id=? AND job_id IN (${placeholders})
       `,
-      jobIds
+      [tenantId, ...jobIds]
     );
 
     res.json({

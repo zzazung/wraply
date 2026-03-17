@@ -1,5 +1,3 @@
-// api/routes/projects.js
-
 const express = require("express");
 const { v4: uuidv4 } = require("uuid");
 
@@ -14,16 +12,24 @@ router.get("/", async (req, res) => {
 
   try {
 
+    const { tenantId } = req.user;
+
     const rows = await query(
       `
       SELECT
         id,
+        tenant_id,
         name,
+        safe_name,
+        package_name,
+        bundle_id,
         created_at,
         updated_at
       FROM projects
+      WHERE tenant_id=?
       ORDER BY created_at DESC
-      `
+      `,
+      [tenantId]
     );
 
     res.json({ items: rows });
@@ -44,20 +50,41 @@ router.post("/", async (req, res) => {
 
   try {
 
-    const { name, packageName } = req.body;
+    const { tenantId } = req.user;
+
+    const {
+      name,
+      packageName,
+      bundleId
+    } = req.body;
 
     if (!name || !packageName)
       return res.status(400).json({ error: "Invalid fields" });
 
     const id = `project_${uuidv4()}`;
+    const safeName = packageName.replace(/\./g, "_");
 
     await query(
       `
       INSERT INTO projects
-      (id, name)
-      VALUES (?, ?)
+      (
+        id,
+        tenant_id,
+        name,
+        safe_name,
+        package_name,
+        bundle_id
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
       `,
-      [id, name]
+      [
+        id,
+        tenantId,
+        name,
+        safeName,
+        packageName,
+        bundleId || null
+      ]
     );
 
     res.json({ id });
@@ -78,9 +105,15 @@ router.get("/:projectId", async (req, res) => {
 
   try {
 
+    const { tenantId } = req.user;
+
     const rows = await query(
-      `SELECT * FROM projects WHERE id=?`,
-      [req.params.projectId]
+      `
+      SELECT *
+      FROM projects
+      WHERE id=? AND tenant_id=?
+      `,
+      [req.params.projectId, tenantId]
     );
 
     if (!rows.length)
@@ -104,19 +137,22 @@ router.get("/:projectId/builds", async (req, res) => {
 
   try {
 
+    const { tenantId } = req.user;
+
     const rows = await query(
       `
       SELECT
         job_id,
+        tenant_id,
         platform,
         status,
         progress,
         created_at
       FROM jobs
-      WHERE project_id=?
+      WHERE project_id=? AND tenant_id=?
       ORDER BY created_at DESC
       `,
-      [req.params.projectId]
+      [req.params.projectId, tenantId]
     );
 
     res.json({ items: rows });
@@ -137,13 +173,14 @@ router.post("/:projectId/builds", async (req, res) => {
 
   try {
 
+    const { tenantId } = req.user;
     const { projectId } = req.params;
 
     const {
       platform,
       packageName,
       appName,
-      serviceUrl,
+      url,
       scheme
     } = req.body || {};
 
@@ -160,6 +197,7 @@ router.post("/:projectId/builds", async (req, res) => {
       INSERT INTO jobs
       (
         job_id,
+        tenant_id,
         project_id,
         platform,
         package_name,
@@ -170,23 +208,31 @@ router.post("/:projectId/builds", async (req, res) => {
         status,
         progress
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0)
       `,
       [
         jobId,
+        tenantId,
         projectId,
         platform,
         packageName,
         safeName,
         appName || null,
-        serviceUrl || null,
+        url || null,
         scheme || null
       ]
     );
 
     const { enqueueBuild } = require("../queue/buildQueue");
 
-    await enqueueBuild({ jobId });
+    await enqueueBuild({
+      jobId,
+      tenantId,
+      projectId,
+      platform,
+      packageName,
+      url
+    });
 
     res.json({
       success: true,

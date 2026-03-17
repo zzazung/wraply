@@ -118,7 +118,9 @@ async function ensureAndroidSigning(packageName, safeName) {
       INSERT INTO android_signing_keys
       (
         id,
-				safe_name,
+        project_id,
+        tenant_id,
+        safe_name,
         package_name,
         mode,
         keystore_path,
@@ -128,15 +130,21 @@ async function ensureAndroidSigning(packageName, safeName) {
         key_pass_enc,
         fingerprint_sha1,
         fingerprint_sha256,
+        version,
+        is_active,
         created_at,
         updated_at
       )
       VALUES
       (
         ?,
-				?,
+        ?,
+        ?,
+        ?,
         ?,
         'managed',
+        ?,
+        ?,
         ?,
         ?,
         ?,
@@ -149,7 +157,9 @@ async function ensureAndroidSigning(packageName, safeName) {
       )
     `,[
       uuidv4(),
-			safeName,
+      null,
+      "default",
+      safeName,
       packageName,
       relPath,
       meta.keystore_sha256,
@@ -157,7 +167,9 @@ async function ensureAndroidSigning(packageName, safeName) {
       meta.storePass,
       meta.keyPass,
       meta.sha1,
-      meta.sha256
+      meta.sha256,
+      1,
+      1
     ]);
 
     return {
@@ -234,7 +246,9 @@ async function ensureAndroidSigning(packageName, safeName) {
     INSERT INTO android_signing_keys
     (
       id,
-			safe_name,
+      project_id,
+      tenant_id,
+      safe_name,
       package_name,
       mode,
       keystore_path,
@@ -244,15 +258,21 @@ async function ensureAndroidSigning(packageName, safeName) {
       key_pass_enc,
       fingerprint_sha1,
       fingerprint_sha256,
+      version,
+      is_active,
       created_at,
       updated_at
     )
     VALUES
     (
       ?,
-			?,
+      ?,
+      ?,
+      ?,
       ?,
       'managed',
+      ?,
+      ?,
       ?,
       ?,
       ?,
@@ -265,7 +285,9 @@ async function ensureAndroidSigning(packageName, safeName) {
     )
   `,[
     uuidv4(),
-		safeName,
+    null,
+    "default",
+    safeName,
     packageName,
     relPath,
     keystoreSha,
@@ -273,7 +295,9 @@ async function ensureAndroidSigning(packageName, safeName) {
     storePass,
     keyPass,
     sha1,
-    sha256
+    sha256,
+    1,
+    1
   ]);
 
   /* ---------- metadata save ---------- */

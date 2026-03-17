@@ -11,18 +11,17 @@ async function start() {
 
     console.log("[wraply-worker] starting worker");
 
-    // start build queue consumer
+    // build queue consumer
     require("./queue/buildConsumer");
 
     console.log("[wraply-worker] build consumer started");
 
-    // start cancel listener
+    // cancel listener
     await startCancelListener();
 
   } catch (err) {
 
     console.error("[wraply-worker] startup error", err);
-
     process.exit(1);
 
   }

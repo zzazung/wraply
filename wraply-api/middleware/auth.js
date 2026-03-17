@@ -34,12 +34,12 @@ function requireAuth(req, res, next) {
     if (WRAPLY_DEV && token === "dev-user") {
 
       req.user = {
-        id: "dev-user",
-        role: "admin",
-        email: "dev@wraply.local"
+        userId: "dev-user",
+        tenantId: "dev-tenant"
       };
 
       return next();
+
     }
 
     const payload = jwt.verifyToken(token);
@@ -50,7 +50,10 @@ function requireAuth(req, res, next) {
       });
     }
 
-    req.user = payload;
+    req.user = {
+      userId: payload.userId,
+      tenantId: payload.tenantId
+    };
 
     next();
 

@@ -1,32 +1,59 @@
 # Wraply Database Architecture
 
-Wraply는 모바일 웹을 Android / iOS 네이티브 앱으로 빌드하는 **CI 플랫폼**입니다.
+Wraply는 모바일 웹을 Android / iOS 네이티브 앱으로 빌드하는 **Multi-Tenant CI 플랫폼**입니다.
 
 이 문서는 Wraply의 **Database 구조와 역할**을 설명합니다.
 
 설계 기준
 
+- Multi-Tenant Architecture
 - Worker 기반 Build System
 - BullMQ + Redis Queue
 - Artifact Storage
 - WebSocket Log Streaming
 - Stateless Worker Architecture
+- Signing Asset Reuse
 
 ---
 
 # ER Diagram
 
 ```
-users
-
-projects
+tenants
    │
-   ├── jobs
+   ├── users
+   │
+   ├── projects
    │      │
-   │      └── artifacts
+   │      ├── jobs
+   │      │      │
+   │      │      └── artifacts
+   │      │
+   │      ├── android_signing_keys
+   │      │
+   │      └── ios_signing_assets
    │
-   └── android_signing_keys
+   └── apple_accounts
 ```
+
+---
+
+# tenants
+
+Wraply의 **Multi-Tenant 핵심 테이블**
+
+| column | type | description |
+|------|------|-------------|
+| id | VARCHAR(36) | tenant id |
+| name | VARCHAR | tenant display name |
+| owner_user_id | VARCHAR(36) | owner user |
+| created_at | DATETIME | created time |
+| updated_at | DATETIME | updated time |
+
+설명
+
+- Wraply는 **Multi-Tenant CI 플랫폼**
+- 모든 프로젝트와 signing asset은 tenant 단위로 분리됨
 
 ---
 
@@ -36,10 +63,36 @@ projects
 
 | column | type | description |
 |------|------|-------------|
-| id | BIGINT | user id |
+| id | VARCHAR(36) | user id |
+| tenant_id | VARCHAR(36) | tenant reference |
 | email | VARCHAR | login email |
 | password_hash | VARCHAR | password hash |
 | created_at | DATETIME | account creation time |
+
+설명
+
+- 사용자는 반드시 하나의 tenant에 속함
+
+---
+
+# apple_accounts
+
+사용자가 연결한 Apple Developer 계정
+
+| column | type | description |
+|------|------|-------------|
+| id | VARCHAR(36) | apple account id |
+| tenant_id | VARCHAR(36) | tenant reference |
+| apple_id | VARCHAR | Apple login email |
+| team_id | VARCHAR | Apple Developer Team ID |
+| session | TEXT | fastlane session cache |
+| created_at | DATETIME | created time |
+| updated_at | DATETIME | updated time |
+
+설명
+
+- tenant별 Apple 계정 연결
+- Fastlane session 캐시 저장 가능
 
 ---
 
@@ -50,14 +103,18 @@ projects
 | column | description |
 |------|-------------|
 | id | project id |
+| tenant_id | tenant reference |
 | name | project display name |
+| platform | android / ios |
+| package_name | android package |
+| bundle_id | ios bundle id |
 | created_at | created time |
 | updated_at | updated time |
 
 설명
 
-- 프로젝트 기본 정보만 저장
-- build input 값은 jobs 테이블에 저장
+- 프로젝트 기본 정보 저장
+- Build 입력 값은 jobs 테이블에 저장
 
 ---
 
@@ -68,11 +125,13 @@ projects
 | column | description |
 |------|-------------|
 | job_id | build job id |
+| tenant_id | tenant reference |
 | project_id | project reference |
 | worker_id | worker instance id |
 | build_host | physical build machine |
 | platform | android / ios |
 | package_name | package identifier |
+| bundle_id | ios bundle identifier |
 | safe_name | safe build name |
 | app_name | build app name |
 | url | target service url |
@@ -92,6 +151,11 @@ projects
 | finished_at | build finished time |
 | error_reason | build error reason |
 
+설명
+
+- Worker 상태 및 Build 진행 상황 저장
+- WebSocket 로그 스트리밍과 연동
+
 ---
 
 # artifacts
@@ -101,6 +165,7 @@ projects
 | column | description |
 |------|-------------|
 | id | artifact id |
+| tenant_id | tenant reference |
 | job_id | build job reference |
 | platform | android / ios |
 | type | artifact type |
@@ -131,12 +196,10 @@ Android signing key 관리
 | column | description |
 |------|-------------|
 | id | signing key id |
-| project_id | project reference |
+| tenant_id | tenant reference |
 | safe_name | build safe name |
 | package_name | package id |
 | mode | signing mode |
-| version | signing key version |
-| is_active | active key |
 | keystore_path | keystore file path |
 | keystore_sha256 | keystore fingerprint |
 | fingerprint_sha1 | SHA1 fingerprint |
@@ -146,6 +209,39 @@ Android signing key 관리
 | key_pass_enc | encrypted key password |
 | created_at | created time |
 | updated_at | updated time |
+
+설명
+
+- tenant별 Android keystore 관리
+- 동일 package_name이라도 tenant별로 분리 가능
+
+예
+
+```
+tenantA → com.app
+tenantB → com.app
+```
+
+---
+
+# ios_signing_assets
+
+iOS signing asset 관리
+
+| column | description |
+|------|-------------|
+| id | asset id |
+| tenant_id | tenant reference |
+| bundle_id | iOS bundle id |
+| certificate_name | certificate identifier |
+| provisioning_uuid | provisioning profile uuid |
+| created_at | created time |
+| updated_at | updated time |
+
+설명
+
+- tenant별 iOS signing asset 관리
+- provisioning / certificate reuse 가능
 
 ---
 
@@ -217,7 +313,8 @@ artifact는 파일 시스템 또는 object storage에 저장됩니다.
 Example
 
 ```
-/ci/builds/job_xxx/app.apk
+/artifacts/android/<tenant_id>/<job_id>/app.apk
+/artifacts/ios/<tenant_id>/<job_id>/app.ipa
 ```
 
 Download
@@ -243,3 +340,52 @@ Worker
    ↓
 Artifact Storage
 ```
+
+---
+
+# Signing Storage (Filesystem)
+
+Signing asset은 filesystem에 tenant 기준으로 저장됩니다.
+
+```
+signing
+ ├ ios
+ │   └ tenants
+ │       └ <tenant_id>
+ │           ├ certs
+ │           ├ profiles
+ │           └ keychains
+ │
+ └ android
+     └ tenants
+         └ <tenant_id>
+             └ <package_name>
+                 ├ managed.jks
+                 └ metadata.json
+```
+
+---
+
+# Multi-Tenant Principle
+
+Wraply의 모든 핵심 데이터는 **tenant 기준으로 분리됩니다**
+
+```
+tenant
+   │
+   ├ projects
+   │
+   ├ jobs
+   │
+   ├ ios signing
+   │
+   └ android signing
+```
+
+이를 통해
+
+- multi-organization 지원
+- signing isolation
+- build isolation
+
+을 보장합니다.

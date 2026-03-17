@@ -182,7 +182,7 @@ function ensureAppId({
       }
     );
 
-  } catch {
+  } catch (err) {
 
     console.log("[iosSigning] produce error");
 
@@ -340,7 +340,11 @@ async function ensureIOSSigning({
   jobId,
   bundleId,
   appleId,
-  teamId
+  teamId,
+  mode,
+  apiKeyId,
+  apiIssuerId,
+  apiKeyPath
 
 }) {
 
@@ -351,6 +355,28 @@ async function ensureIOSSigning({
   ensureDir(PROFILE_DIR);
 
   ensureWWDR();
+
+  /* ---------- API KEY MODE ---------- */
+
+  if (mode === "api_key") {
+
+    console.log("[iosSigning] mode: api_key");
+
+    const keychain =
+      createTempKeychain(jobId);
+
+    return {
+      keychainPath: keychain,
+      env: {
+        ASC_KEY_ID: apiKeyId,
+        ASC_ISSUER_ID: apiIssuerId,
+        ASC_KEY_PATH: apiKeyPath
+      }
+    };
+
+  }
+
+  /* ---------- APPLE LOGIN MODE ---------- */
 
   await acquireLock();
 
@@ -405,7 +431,8 @@ async function ensureIOSSigning({
     createTempKeychain(jobId);
 
   return {
-    keychainPath: keychain
+    keychainPath: keychain,
+    env: {}
   };
 
 }

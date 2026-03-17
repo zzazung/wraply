@@ -43,7 +43,7 @@ function sha256(filePath) {
   return hash.digest("hex");
 }
 
-async function saveArtifact(jobId, platform, filePath, versionName, versionCode) {
+async function saveArtifact(jobId, tenantId, platform, filePath, versionName, versionCode) {
 
   if (!fs.existsSync(filePath)) {
     console.error("[worker] artifact file not found:", filePath);
@@ -53,7 +53,9 @@ async function saveArtifact(jobId, platform, filePath, versionName, versionCode)
   const stat = fs.statSync(filePath);
   const name = path.basename(filePath);
 
-  const versionDir = `${versionName}_${versionCode}`;
+  const versionDir = versionName && versionCode
+      ? `${versionName}_${versionCode}`
+      : "unknown";
 
   const artifactDir = path.join(
     ARTIFACT_ROOT,
@@ -80,10 +82,11 @@ async function saveArtifact(jobId, platform, filePath, versionName, versionCode)
 
   await query(`
     INSERT INTO artifacts
-    (id, job_id, platform, type, name, path, size, checksum, version_name, version_code)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, tenant_id, job_id, platform, type, name, path, size, checksum, version_name, version_code)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     uuidv4(),
+    tenantId,
     jobId,
     platform,
     type,
@@ -99,7 +102,14 @@ async function saveArtifact(jobId, platform, filePath, versionName, versionCode)
 
 async function transition(jobId, nextState) {
 
+  console.log("[worker] transition:", jobId, nextState);
+
   const rows = await query(`SELECT status FROM jobs WHERE job_id=?`, [jobId]);
+
+  if (!rows || rows.length === 0) {
+    console.error("[worker] job not found:", jobId);
+    return;
+  }
 
   const current = rows[0].status;
 
@@ -132,7 +142,17 @@ async function runBuild(job) {
 
   return new Promise(async resolve => {
 
-    const { jobId, platform, safeName, packageName, appName, url } = job;
+    console.log("[worker] runBuild job:", job);
+
+    const {
+      jobId,
+      tenantId,
+      platform,
+      safeName,
+      packageName,
+      appName,
+      url
+    } = job;
 
     let versionName = null;
     let versionCode = null;
@@ -163,6 +183,8 @@ async function runBuild(job) {
 
       let signingEnv = {};
 
+      /* ---------- Android ---------- */
+
       if (platform === "android") {
 
         const signing = await ensureAndroidSigning(packageName, safeName);
@@ -175,16 +197,40 @@ async function runBuild(job) {
         };
 
       }
+
+      /* ---------- iOS ---------- */
+
       else if (platform === "ios") {
+
+        const signingRows = await query(`
+          SELECT *
+          FROM ios_signing_assets
+          WHERE tenant_id=? AND bundle_id=?
+          LIMIT 1
+        `,[tenantId, packageName]);
+
+        if (!signingRows || signingRows.length === 0)
+          throw new Error("iOS signing asset not found");
+
+        const asset = signingRows[0];
 
         const signing = await ensureIOSSigning({
           jobId,
           bundleId: packageName,
           appleId: process.env.APPLE_ID,
-          teamId: process.env.DEVELOPER_TEAM_ID
+          teamId: process.env.DEVELOPER_TEAM_ID,
+          mode: asset.mode,
+          apiKeyId: asset.api_key_id,
+          apiIssuerId: asset.api_issuer_id,
+          apiKeyPath: asset.api_key_path
         });
 
         iosKeychain = signing.keychainPath;
+
+        signingEnv = {
+          ...signing.env,
+          ASC_KEY_PATH: path.join(WRAPLY_ROOT, signing.env.ASC_KEY_PATH)
+        };
 
       }
 
@@ -198,6 +244,10 @@ async function runBuild(job) {
 
       await transition(jobId, STATES.BUILDING);
 
+      console.log("[worker] spawn build start");
+      console.log("[worker] build script:", buildScript);
+      console.log("[worker] args:", jobId, safeName, packageName, appName, url);
+
       const proc = spawn(
         "bash",
         [buildScript, jobId, safeName, packageName, appName, url],
@@ -207,11 +257,18 @@ async function runBuild(job) {
             ...process.env,
             ...signingEnv,
             WRAPLY_ROOT
-          }
+          },
+          stdio: ["ignore", "pipe", "pipe"]
         }
       );
 
+      console.log("[worker] spawn pid:", proc.pid);
+
       registerBuild(jobId, proc);
+
+      proc.on("error", err => {
+        console.error("[worker] spawn error:", err);
+      });
 
       let stdoutBuffer = "";
 
@@ -225,15 +282,15 @@ async function runBuild(job) {
         for (const line of lines) {
 
           const text = line.trim();
-
           if (!text) continue;
+
+          console.log("[build]", text);
 
           await publishLog(jobId, text);
 
-          if (text.startsWith("OUTPUT_DIR=")) {
+          if (text.includes("OUTPUT_DIR=")) {
 
             const rel = text.split("=")[1].trim();
-
             const candidate = path.join(WRAPLY_ROOT, rel);
 
             const versionPart = path.basename(candidate);
@@ -246,12 +303,13 @@ async function runBuild(job) {
 
           }
 
-          if (text.startsWith("WRAPLY_ARTIFACT=")) {
+          if (text.includes("WRAPLY_ARTIFACT=")) {
 
             const artifactPath = text.split("=")[1].trim();
 
             await saveArtifact(
               jobId,
+              tenantId,
               platform,
               artifactPath,
               versionName,
@@ -264,6 +322,10 @@ async function runBuild(job) {
 
       });
 
+      proc.stderr.on("data", d => {
+        console.log("[build stderr]", d.toString());
+      });
+
       proc.on("close", async code => {
 
         unregisterBuild(jobId);
@@ -271,9 +333,8 @@ async function runBuild(job) {
         clearInterval(heartbeatDB);
         stopHeartbeat(heartbeatTimer);
 
-        if (iosKeychain) {
+        if (iosKeychain)
           deleteTempKeychain(iosKeychain);
-        }
 
         if (code === 0) {
 
@@ -306,9 +367,8 @@ async function runBuild(job) {
 
       await publishLog(jobId, err.message);
 
-      if (iosKeychain) {
+      if (iosKeychain)
         deleteTempKeychain(iosKeychain);
-      }
 
       await transition(jobId, STATES.FAILED);
 

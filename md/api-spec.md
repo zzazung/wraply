@@ -1,6 +1,6 @@
 # Wraply API Specification
 
-Wraply API는 모바일 웹을 Android / iOS 네이티브 앱으로 빌드하기 위한 CI 플랫폼 API입니다.
+Wraply API는 모바일 웹을 Android / iOS 네이티브 앱으로 빌드하기 위한 **Multi-Tenant CI 플랫폼 API**입니다.
 
 기본 URL
 
@@ -38,6 +38,13 @@ Authorization: Bearer dev-user
 WRAPLY_DEV=true
 ```
 
+JWT payload에는 다음 정보가 포함됩니다.
+
+```
+userId
+tenantId
+```
+
 ---
 
 # API Overview
@@ -45,6 +52,8 @@ WRAPLY_DEV=true
 | Method | Endpoint | Description |
 |------|------|-------------|
 | POST | /auth/login | 사용자 로그인 |
+| GET | /tenants | tenant 목록 |
+| POST | /tenants | tenant 생성 |
 | GET | /projects | 프로젝트 목록 |
 | POST | /projects | 프로젝트 생성 |
 | GET | /projects/:projectId | 프로젝트 조회 |
@@ -58,6 +67,8 @@ WRAPLY_DEV=true
 | DELETE | /jobs | 빌드 삭제 |
 | GET | /artifacts/:artifactId | artifact 정보 |
 | GET | /install/:artifactId | 앱 설치 |
+| GET | /apple-accounts | Apple 계정 목록 |
+| POST | /apple-accounts | Apple 계정 등록 |
 
 ---
 
@@ -80,7 +91,52 @@ Response
 
 ```json
 {
-  "token": "jwt_token"
+  "token": "jwt_token",
+  "userId": "user_1",
+  "tenantId": "tenant_1"
+}
+```
+
+---
+
+# Tenants API
+
+## GET /tenants
+
+Tenant 목록 조회
+
+Response
+
+```json
+{
+  "items": [
+    {
+      "id": "tenant_1",
+      "name": "Acme Inc"
+    }
+  ]
+}
+```
+
+---
+
+## POST /tenants
+
+Tenant 생성
+
+Request
+
+```json
+{
+  "name": "Acme Inc"
+}
+```
+
+Response
+
+```json
+{
+  "id": "tenant_1"
 }
 ```
 
@@ -90,7 +146,7 @@ Response
 
 ## GET /projects
 
-프로젝트 목록
+Tenant 기준 프로젝트 목록
 
 Request
 
@@ -105,9 +161,11 @@ Response
   "items": [
     {
       "id": "project_1",
+      "tenant_id": "tenant_1",
       "name": "My App",
       "safe_name": "my_app",
       "package_name": "com.example.app",
+      "bundle_id": "com.example.app",
       "created_at": "2026-01-01T00:00:00Z",
       "updated_at": "2026-01-01T00:00:00Z"
     }
@@ -126,7 +184,8 @@ Request
 ```json
 {
   "name": "My App",
-  "packageName": "com.example.app"
+  "packageName": "com.example.app",
+  "bundleId": "com.example.app"
 }
 ```
 
@@ -149,9 +208,11 @@ Response
 ```json
 {
   "id": "project_123",
+  "tenant_id": "tenant_1",
   "name": "My App",
   "safe_name": "my_app",
-  "package_name": "com.example.app"
+  "package_name": "com.example.app",
+  "bundle_id": "com.example.app"
 }
 ```
 
@@ -168,6 +229,7 @@ Response
   "items": [
     {
       "job_id": "job_123",
+      "tenant_id": "tenant_1",
       "platform": "android",
       "status": "building",
       "progress": 60,
@@ -192,6 +254,7 @@ Request
   "projectId": "project_123",
   "platform": "android",
   "packageName": "com.example.app",
+  "bundleId": "com.example.app",
   "appName": "My App",
   "url": "https://example.com"
 }
@@ -203,6 +266,20 @@ Response
 {
   "success": true,
   "jobId": "job_abc123"
+}
+```
+
+Worker Payload Example
+
+```json
+{
+  "jobId": "job_abc123",
+  "tenantId": "tenant_1",
+  "projectId": "project_123",
+  "platform": "android",
+  "packageName": "com.example.app",
+  "bundleId": "com.example.app",
+  "url": "https://example.com"
 }
 ```
 
@@ -219,6 +296,7 @@ Response
   "items": [
     {
       "job_id": "job_123",
+      "tenant_id": "tenant_1",
       "platform": "android",
       "status": "building",
       "progress": 45
@@ -238,6 +316,7 @@ Response
 ```json
 {
   "job_id": "job_123",
+  "tenant_id": "tenant_1",
   "platform": "android",
   "status": "building",
   "progress": 50,
@@ -278,8 +357,9 @@ Response
   "items": [
     {
       "id": "artifact_123",
+      "tenant_id": "tenant_1",
       "platform": "android",
-      "downloadUrl": "/downloads/builds/job_123/app.apk",
+      "downloadUrl": "/downloads/android/tenant_1/job_123/app.apk",
       "size": 23452345,
       "createdAt": 170000000
     }
@@ -340,8 +420,9 @@ Response
 ```json
 {
   "id": "artifact_123",
+  "tenant_id": "tenant_1",
   "platform": "android",
-  "downloadUrl": "/downloads/builds/job_123/app.apk",
+  "downloadUrl": "/downloads/android/tenant_1/job_123/app.apk",
   "size": 23452345
 }
 ```
@@ -368,6 +449,52 @@ itms-services install
 
 ---
 
+# Apple Accounts API
+
+## GET /apple-accounts
+
+Apple Developer 계정 목록
+
+Response
+
+```json
+{
+  "items": [
+    {
+      "id": "apple_1",
+      "tenant_id": "tenant_1",
+      "apple_id": "dev@example.com",
+      "team_id": "ABCDE12345"
+    }
+  ]
+}
+```
+
+---
+
+## POST /apple-accounts
+
+Apple Developer 계정 등록
+
+Request
+
+```json
+{
+  "appleId": "dev@example.com",
+  "teamId": "ABCDE12345"
+}
+```
+
+Response
+
+```json
+{
+  "id": "apple_1"
+}
+```
+
+---
+
 # WebSocket API
 
 빌드 로그 스트리밍
@@ -375,7 +502,7 @@ itms-services install
 Endpoint
 
 ```
-ws://localhost:4000?jobId=job_123
+ws://localhost:4000?jobId=job_123&tenantId=tenant_1
 ```
 
 Message Types
@@ -386,6 +513,7 @@ log
 {
   "type": "log",
   "jobId": "job_123",
+  "tenantId": "tenant_1",
   "message": "Building APK...",
   "ts": 170000000
 }
@@ -397,6 +525,7 @@ status
 {
   "type": "status",
   "jobId": "job_123",
+  "tenantId": "tenant_1",
   "status": "building",
   "progress": 40,
   "ts": 170000000
