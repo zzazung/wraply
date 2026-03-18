@@ -1,22 +1,15 @@
 import type { ButtonHTMLAttributes } from "react";
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement>{
-
-  variant?:"primary" | "outline";
-
+  variant?: "primary" | "outline";
 }
 
-export default function Button({
-
-  variant="primary",
-
-  className="",
-
+function Button({
+  variant = "primary",
+  className = "",
   children,
-
   ...props
-
-}:Props){
+}: Props){
 
   const base = `
   px-4
@@ -46,16 +39,13 @@ export default function Button({
       `;
 
   return(
-
     <button
       className={`${base} ${style} ${className}`}
       {...props}
     >
-
       {children}
-
     </button>
-
   );
-
 }
+
+export { Button };

@@ -1,23 +1,16 @@
-import { useEffect,useState } from "react";
+import { useAuthStore } from "@/stores/authStore";
 
-export default function useAuth(){
+export function useAuth(){
 
-  const [user,setUser] = useState<any>(null);
+  const token = useAuthStore((s)=>s.token);
+  const user = useAuthStore((s)=>s.user);
 
-  useEffect(()=>{
+  const isAuthenticated = !!token;
 
-    const token = localStorage.getItem("wraply_token");
-
-    if(token){
-
-      setUser({
-        token
-      });
-
-    }
-
-  },[]);
-
-  return { user };
+  return {
+    token,
+    user,
+    isAuthenticated
+  };
 
 }

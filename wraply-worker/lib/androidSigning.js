@@ -58,16 +58,20 @@ function getFingerprint(keystorePath, storePass) {
 
 /* ---------- ensure signing ---------- */
 
-async function ensureAndroidSigning(packageName, safeName) {
+async function ensureAndroidSigning(
+  tenantId,
+  packageName,
+  safeName
+) {
 
   /* ---------- DB lookup ---------- */
 
   const rows = await query(`
     SELECT *
     FROM android_signing_keys
-    WHERE package_name=?
+    WHERE tenant_id=? AND package_name=?
     LIMIT 1
-  `,[packageName]);
+  `,[tenantId, packageName]);
 
   if (rows && rows.length > 0) {
 
@@ -87,6 +91,7 @@ async function ensureAndroidSigning(packageName, safeName) {
   const signingDir = path.join(
     SIGNING_ROOT,
     "android",
+    tenantId,
     packageName
   );
 
@@ -110,6 +115,7 @@ async function ensureAndroidSigning(packageName, safeName) {
 
     const relPath = path.join(
       "android",
+      tenantId,
       packageName,
       "managed.jks"
     );
@@ -158,7 +164,7 @@ async function ensureAndroidSigning(packageName, safeName) {
     `,[
       uuidv4(),
       null,
-      "default",
+      tenantId,
       safeName,
       packageName,
       relPath,
@@ -236,6 +242,7 @@ async function ensureAndroidSigning(packageName, safeName) {
 
   const relPath = path.join(
     "android",
+    tenantId,
     packageName,
     "managed.jks"
   );
@@ -286,7 +293,7 @@ async function ensureAndroidSigning(packageName, safeName) {
   `,[
     uuidv4(),
     null,
-    "default",
+    tenantId,
     safeName,
     packageName,
     relPath,
@@ -330,14 +337,17 @@ async function ensureAndroidSigning(packageName, safeName) {
 
 /* ---------- get signing info ---------- */
 
-async function getAndroidSigning(packageName) {
+async function getAndroidSigning(
+  tenantId,
+  packageName
+) {
 
   const rows = await query(`
     SELECT *
     FROM android_signing_keys
-    WHERE package_name=?
+    WHERE tenant_id=? AND package_name=?
     LIMIT 1
-  `,[packageName]);
+  `,[tenantId, packageName]);
 
   if (!rows || rows.length === 0)
     return null;

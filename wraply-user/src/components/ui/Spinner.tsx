@@ -1,4 +1,4 @@
-export default function Spinner(){
+function Spinner(){
 
   return(
 
@@ -17,3 +17,5 @@ export default function Spinner(){
   );
 
 }
+
+export { Spinner };

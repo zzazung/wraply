@@ -10,7 +10,7 @@ interface Props{
 
 }
 
-export default function Badge({
+function Badge({
 
   variant="queued",
 
@@ -49,3 +49,5 @@ export default function Badge({
   );
 
 }
+
+export { Badge };

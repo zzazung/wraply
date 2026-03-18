@@ -1,5 +1,6 @@
 // lib/crypto.js
 const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
 
 const path = require("path");
 require("dotenv").config({
@@ -13,9 +14,12 @@ function getKey() {
   if (raw.length < 16) {
     throw new Error("WRAPLY_SECRET_KEY too short");
   }
-  // 32바이트 키로 정규화
   return crypto.createHash("sha256").update(raw).digest();
 }
+
+/* --------------------------------------------------
+   AES (for signing / secrets)
+-------------------------------------------------- */
 
 function encrypt(plain) {
   const key = getKey();
@@ -38,4 +42,23 @@ function decrypt(b64) {
   return plain.toString("utf8");
 }
 
-module.exports = { encrypt, decrypt };
+/* --------------------------------------------------
+   PASSWORD (for auth)
+-------------------------------------------------- */
+
+const SALT_ROUNDS = 10;
+
+async function hashPassword(password) {
+  return await bcrypt.hash(password, SALT_ROUNDS);
+}
+
+async function comparePassword(password, hash) {
+  return await bcrypt.compare(password, hash);
+}
+
+module.exports = {
+  encrypt,
+  decrypt,
+  hashPassword,
+  comparePassword
+};

@@ -1,180 +1,147 @@
-const express = require("express");
-const { v4: uuidv4 } = require("uuid");
+// wraply-api/routes/projects.js
 
-const { query } = require("@wraply/shared/db");
+const express = require("express")
+const { v4: uuidv4 } = require("uuid")
 
-const router = express.Router();
+const tenantDb = require("../lib/tenantDb")
+const requireAuth = require("../middleware/auth")
+
+const { enqueueBuild } = require("../queue/buildQueue")
+
+const router = express.Router()
 
 /**
  * Project List
  */
-router.get("/", async (req, res) => {
+router.get("/", requireAuth, async (req, res) => {
 
   try {
 
-    const { tenantId } = req.user;
+    const db = tenantDb(req)
 
-    const rows = await query(
-      `
-      SELECT
-        id,
-        tenant_id,
-        name,
-        safe_name,
-        package_name,
-        bundle_id,
-        created_at,
-        updated_at
-      FROM projects
-      WHERE tenant_id=?
-      ORDER BY created_at DESC
-      `,
-      [tenantId]
-    );
+    const projects = await db.projects.list()
 
-    res.json({ items: rows });
+    res.json({ items: projects })
 
   } catch (err) {
 
-    console.error("project list error:", err);
-    res.status(500).json({ error: "internal error" });
+    console.error("project list error:", err)
+    res.status(500).json({ error: "internal error" })
 
   }
 
-});
+})
 
 /**
  * Project Create
  */
-router.post("/", async (req, res) => {
+router.post("/", requireAuth, async (req, res) => {
 
   try {
 
-    const { tenantId } = req.user;
+    const db = tenantDb(req)
 
     const {
       name,
       packageName,
       bundleId
-    } = req.body;
+    } = req.body
 
-    if (!name || !packageName)
-      return res.status(400).json({ error: "Invalid fields" });
+    if (!name || !packageName) {
+      return res.status(400).json({ error: "Invalid fields" })
+    }
 
-    const id = `project_${uuidv4()}`;
-    const safeName = packageName.replace(/\./g, "_");
+    const id = uuidv4()
+    const safeName = packageName.replace(/\./g, "_")
 
-    await query(
-      `
-      INSERT INTO projects
-      (
-        id,
-        tenant_id,
-        name,
-        safe_name,
-        package_name,
-        bundle_id
-      )
-      VALUES (?, ?, ?, ?, ?, ?)
-      `,
-      [
-        id,
-        tenantId,
-        name,
-        safeName,
-        packageName,
-        bundleId || null
-      ]
-    );
+    await db.projects.create({
+      id,
+      name,
+      safeName,
+      packageName,
+      bundleId
+    })
 
-    res.json({ id });
+    res.json({ id })
 
   } catch (err) {
 
-    console.error("project create error:", err);
-    res.status(500).json({ error: "internal error" });
+    console.error("project create error:", err)
+    res.status(500).json({ error: "internal error" })
 
   }
 
-});
+})
 
 /**
  * Project Detail
  */
-router.get("/:projectId", async (req, res) => {
+router.get("/:projectId", requireAuth, async (req, res) => {
 
   try {
 
-    const { tenantId } = req.user;
+    const db = tenantDb(req)
 
-    const rows = await query(
-      `
-      SELECT *
-      FROM projects
-      WHERE id=? AND tenant_id=?
-      `,
-      [req.params.projectId, tenantId]
-    );
+    const project = await db.projects.findById(req.params.projectId)
 
-    if (!rows.length)
-      return res.status(404).json({ error: "Project not found" });
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" })
+    }
 
-    res.json(rows[0]);
+    res.json(project)
 
   } catch (err) {
 
-    console.error("project detail error:", err);
-    res.status(500).json({ error: "internal error" });
+    console.error("project detail error:", err)
+    res.status(500).json({ error: "internal error" })
 
   }
 
-});
+})
 
 /**
  * Project Builds (History)
  */
-router.get("/:projectId/builds", async (req, res) => {
+router.get("/:projectId/builds", requireAuth, async (req, res) => {
 
   try {
 
-    const { tenantId } = req.user;
+    const db = tenantDb(req)
+    const { projectId } = req.params
 
-    const rows = await query(
-      `
-      SELECT
-        job_id,
-        tenant_id,
-        platform,
-        status,
-        progress,
-        created_at
-      FROM jobs
-      WHERE project_id=? AND tenant_id=?
-      ORDER BY created_at DESC
-      `,
-      [req.params.projectId, tenantId]
-    );
+    /**
+     * project 소유권 검증 (중요)
+     */
+    const project = await db.projects.findById(projectId)
 
-    res.json({ items: rows });
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    const builds = await db.jobs.listByProject(projectId)
+
+    res.json({ items: builds })
 
   } catch (err) {
 
-    console.error("project builds error:", err);
-    res.status(500).json({ error: "internal error" });
+    console.error("project builds error:", err)
+    res.status(500).json({ error: "internal error" })
 
   }
 
-});
+})
 
 /**
- * Build Request
+ * ❗ LEGACY (권장: 삭제 예정)
+ * Build Request → 반드시 /jobs로 이동 필요
  */
-router.post("/:projectId/builds", async (req, res) => {
+router.post("/:projectId/builds", requireAuth, async (req, res) => {
 
   try {
 
-    const { tenantId } = req.user;
-    const { projectId } = req.params;
+    const db = tenantDb(req)
+
+    const { projectId } = req.params
 
     const {
       platform,
@@ -182,70 +149,58 @@ router.post("/:projectId/builds", async (req, res) => {
       appName,
       url,
       scheme
-    } = req.body || {};
+    } = req.body || {}
 
-    if (!platform || !packageName)
+    if (!platform || !packageName) {
       return res.status(400).json({
         error: "Invalid fields"
-      });
+      })
+    }
 
-    const jobId = `job_${uuidv4()}`;
-    const safeName = packageName.replace(/\./g, "_");
+    /**
+     * project 검증 (중요)
+     */
+    const project = await db.projects.findById(projectId)
 
-    await query(
-      `
-      INSERT INTO jobs
-      (
-        job_id,
-        tenant_id,
-        project_id,
-        platform,
-        package_name,
-        safe_name,
-        app_name,
-        url,
-        scheme,
-        status,
-        progress
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0)
-      `,
-      [
-        jobId,
-        tenantId,
-        projectId,
-        platform,
-        packageName,
-        safeName,
-        appName || null,
-        url || null,
-        scheme || null
-      ]
-    );
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" })
+    }
 
-    const { enqueueBuild } = require("../queue/buildQueue");
+    const jobId = uuidv4()
+    const safeName = packageName.replace(/\./g, "_")
+
+    await db.jobs.create({
+      id: jobId,
+      projectId,
+      platform,
+      packageName,
+      safeName,
+      appName,
+      url,
+      scheme
+    })
 
     await enqueueBuild({
       jobId,
-      tenantId,
+      tenantId: req.user.tenantId,
       projectId,
       platform,
       packageName,
       url
-    });
+    })
 
     res.json({
       success: true,
       jobId
-    });
+    })
 
   } catch (err) {
 
-    console.error("build request error:", err);
-    res.status(500).json({ error: "internal error" });
+    console.error("build request error:", err)
+    res.status(500).json({ error: "internal error" })
 
   }
 
-});
+})
 
-module.exports = router;
+module.exports = router

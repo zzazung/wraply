@@ -4,6 +4,8 @@ import GuestGuard from "@/components/auth/GuestGuard";
 import AuthLayout from "@/components/layout/AuthLayout";
 
 import LoginPage from "@/pages/auth/LoginPage";
+import RegisterPage from "@/pages/auth/RegisterPage";
+
 import { installRoutes } from "./installRoutes";
 
 export const publicRoutes = (
@@ -17,6 +19,11 @@ export const publicRoutes = (
         <Route
           path="/login"
           element={<LoginPage />}
+        />
+
+        <Route
+          path="/register"
+          element={<RegisterPage />}
         />
 
       </Route>

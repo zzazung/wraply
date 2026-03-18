@@ -1,5 +1,5 @@
 import { useProjects } from "@/hooks/useProjects";
-import useBuild from "@/hooks/useBuild";
+import { useBuild } from "@/hooks/useBuild";
 
 import BuildCard from "@/components/build/BuildCard";
 import BuildHistoryTable from "@/components/build/BuildHistoryTable";

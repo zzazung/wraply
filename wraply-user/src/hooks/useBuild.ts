@@ -1,22 +1,44 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { useBuildStore } from "@/stores/buildStore";
 
-import { getJob } from "@/services/builds";
+import {
+  getJob,
+  fetchRecentBuilds as fetchRecentBuildsApi
+} from "@/services/builds";
 
-export default function useBuild(jobId:string){
+import type { Build } from "@/types/build";
 
-  const build = useBuildStore((s)=>s.builds[jobId]);
+export function useBuild(jobId?:string){
+
+  const build = useBuildStore((s)=> jobId ? s.builds[jobId] : undefined);
+  const buildsMap = useBuildStore((s)=>s.builds);
 
   const updateBuild = useBuildStore((s)=>s.updateBuild);
 
+  const [builds, setBuilds] = useState<Build[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  /**
+   * 단일 build 로드
+   */
   useEffect(()=>{
+
+    if (!jobId) return;
 
     async function load(){
 
-      const job = await getJob(jobId);
+      try{
 
-      updateBuild(job);
+        const job = await getJob(jobId);
+
+        updateBuild(job);
+
+      }catch(err){
+
+        console.error("[useBuild] getJob error", err);
+
+      }
 
     }
 
@@ -24,6 +46,39 @@ export default function useBuild(jobId:string){
 
   },[jobId]);
 
-  return build;
+  /**
+   * 최근 builds 조회 (Dashboard용)
+   */
+  const fetchRecentBuilds = async () => {
+
+    try{
+
+      setLoading(true);
+
+      const data = await fetchRecentBuildsApi();
+
+      setBuilds(data);
+
+      // store에도 반영 (중요)
+      data.forEach(b => updateBuild(b));
+
+    }catch(err){
+
+      console.error("[useBuild] fetchRecentBuilds error", err);
+
+    }finally{
+
+      setLoading(false);
+
+    }
+
+  };
+
+  return {
+    build,
+    builds,
+    loading,
+    fetchRecentBuilds
+  };
 
 }

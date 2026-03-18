@@ -2,13 +2,14 @@
 set -euo pipefail
 
 JOB_ID="${1:-}"
-SAFE_NAME="${2:-}"
-BUNDLE_ID="${3:-}"
-APP_NAME="${4:-}"
-SERVICE_URL="${5:-}"
+TENANT_ID="${2:-}"
+SAFE_NAME="${3:-}"
+BUNDLE_ID="${4:-}"
+APP_NAME="${5:-}"
+SERVICE_URL="${6:-}"
 
-if [[ -z "$JOB_ID" || -z "$SAFE_NAME" || -z "$BUNDLE_ID" || -z "$APP_NAME" || -z "$SERVICE_URL" ]]; then
-  echo "❌ Usage: ./patch_ios.sh <job_id> <safe_name> <bundle_id> <app_name> <service_url>"
+if [[ -z "$JOB_ID" || -z "$TENANT_ID" || -z "$SAFE_NAME" || -z "$BUNDLE_ID" || -z "$APP_NAME" || -z "$SERVICE_URL" ]]; then
+  echo "❌ Usage: ./patch_ios.sh <job_id> <tenant_id> <safe_name> <bundle_id> <app_name> <service_url>"
   exit 1
 fi
 
@@ -16,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKER_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CI_ROOT="$(cd "$WORKER_ROOT/.." && pwd)"
 
-SRC="$CI_ROOT/projects/ios/$SAFE_NAME/$JOB_ID/source"
+SRC="$CI_ROOT/projects/$TENANT_ID/ios/$SAFE_NAME/$JOB_ID/source"
 
 if [[ ! -d "$SRC" ]]; then
   echo "❌ Project not found: $SRC"
@@ -24,6 +25,7 @@ if [[ ! -d "$SRC" ]]; then
 fi
 
 echo "🍎 iOS patch"
+echo "🏢 tenant: $TENANT_ID"
 echo "📛 bundle: $BUNDLE_ID"
 echo "🏷 appName: $APP_NAME"
 echo "🌐 url: $SERVICE_URL"

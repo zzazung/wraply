@@ -8,232 +8,181 @@ const WRAPLY_ROOT =
 const SIGNING_ROOT =
   path.join(WRAPLY_ROOT, "signing", "ios");
 
-const CERT_DIR =
-  path.join(SIGNING_ROOT, "certs");
-
-const PROFILE_DIR =
-  path.join(SIGNING_ROOT, "profiles");
+const TENANT_ROOT =
+  path.join(SIGNING_ROOT, "tenants");
 
 const KEYCHAIN_DIR =
   path.join(SIGNING_ROOT, "keychains");
 
-const LOCK_FILE =
-  path.join(SIGNING_ROOT, ".signing.lock");
-
 /* ---------- helpers ---------- */
 
 function ensureDir(dir) {
-
   if (!fs.existsSync(dir))
     fs.mkdirSync(dir, { recursive: true });
-
 }
 
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
+function run(cmd, args, env = {}) {
+  return execFileSync(cmd, args, {
+    stdio: "inherit",
+    env: { ...process.env, ...env }
+  });
 }
 
-/* ---------- signing lock ---------- */
+/* ---------- paths ---------- */
 
-async function acquireLock() {
-
-  ensureDir(SIGNING_ROOT);
-
-  while (fs.existsSync(LOCK_FILE)) {
-    await sleep(1000);
-  }
-
-  fs.writeFileSync(
-    LOCK_FILE,
-    process.pid.toString()
-  );
-
+function getTenantDir(tenantId) {
+  return path.join(TENANT_ROOT, tenantId);
 }
 
-function releaseLock() {
-
-  if (fs.existsSync(LOCK_FILE))
-    fs.unlinkSync(LOCK_FILE);
-
+function getCertPath(tenantId) {
+  return path.join(getTenantDir(tenantId), "cert.p12");
 }
 
-/* ---------- WWDR certificate ---------- */
+function getCertPassPath(tenantId) {
+  return path.join(getTenantDir(tenantId), "cert.pass");
+}
 
-function ensureWWDR() {
+function hasCert(tenantId) {
+  return fs.existsSync(getCertPath(tenantId));
+}
+
+/* 🔥 추가: identity 체크 */
+function hasIdentity(keychain) {
 
   try {
 
-    execFileSync(
+    const out = execFileSync(
       "security",
-      [
-        "find-certificate",
-        "-c",
-        "Apple Worldwide Developer Relations Certification Authority"
-      ],
-      { stdio: "ignore" }
-    );
+      ["find-identity", "-v", "-p", "codesigning", keychain],
+      { stdio: ["ignore", "pipe", "ignore"] } // 🔥 stderr 차단
+    ).toString();
+
+    const match = out.match(/([0-9]+) valid identities found/);
+
+    if (!match) return false;
+
+    return parseInt(match[1], 10) > 0;
 
   } catch {
-
-    console.log("[iosSigning] install WWDR certificate");
-
-    const cert =
-      path.join(SIGNING_ROOT, "AppleWWDRCAG3.cer");
-
-    execFileSync(
-      "curl",
-      [
-        "-L",
-        "-o",
-        cert,
-        "https://developer.apple.com/certificationauthority/AppleWWDRCAG3.cer"
-      ],
-      { stdio: "inherit" }
-    );
-
-    execFileSync(
-      "security",
-      [
-        "add-trusted-cert",
-        "-d",
-        "-r",
-        "trustRoot",
-        "-k",
-        `${process.env.HOME}/Library/Keychains/login.keychain-db`,
-        cert
-      ],
-      { stdio: "inherit" }
-    );
-
+    return false;
   }
 
 }
 
-/* ---------- certificate ---------- */
+/* 🔥 추가: p12 export */
+function exportP12FromKeychain(
+  tenantId,
+  keychain,
+  password = "wraply-temp"
+) {
 
-function hasCertificate() {
+  const certPath = getCertPath(tenantId);
+  const passPath = getCertPassPath(tenantId);
 
-  if (!fs.existsSync(CERT_DIR))
-    return false;
+  ensureDir(getTenantDir(tenantId));
 
-  const files =
-    fs.readdirSync(CERT_DIR);
+  console.log("[iosSigning] export p12:", certPath);
 
-  return files.some(f => f.endsWith(".cer"));
+  run("security", [
+    "export",
+    "-k",
+    keychain,
+    "-t",
+    "identities",
+    "-f",
+    "pkcs12",
+    "-o",
+    certPath,
+    "-P",
+    password
+  ]);
 
-}
-
-function createCertificate({
-  appleId,
-  teamId
-}) {
-
-  console.log("[iosSigning] create certificate");
-
-  execFileSync(
-    "fastlane",
-    [
-      "cert",
-      "--development",
-      "--team_id",
-      teamId
-    ],
-    {
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        FASTLANE_USER: appleId,
-        FASTLANE_TEAM_ID: teamId
-      }
-    }
-  );
+  fs.writeFileSync(passPath, password);
 
 }
 
-/* ---------- app id ---------- */
+/* ---------- 이하 기존 코드 그대로 ---------- */
 
-function ensureAppId({
-  bundleId,
-  appName,
-  appleId,
-  teamId
-}) {
+function resolveApiKeyPath(apiKeyPath) {
+  if (path.isAbsolute(apiKeyPath))
+    return apiKeyPath;
+  return path.join(WRAPLY_ROOT, apiKeyPath);
+}
 
-  console.log("[iosSigning] ensure app id:", bundleId);
+function getProfileDir(tenantId, bundleId) {
+  return path.join(getTenantDir(tenantId), "profiles", bundleId);
+}
+
+function getProfilePath(tenantId, bundleId, uuid) {
+  const dir = getProfileDir(tenantId, bundleId);
+  if (!uuid) return dir;
+  return path.join(dir, `${uuid}.mobileprovision`);
+}
+
+function hasProfile(tenantId, bundleId) {
+
+  const dir = getProfileDir(tenantId, bundleId);
+
+  if (!fs.existsSync(dir)) return false;
+
+  const files = fs.readdirSync(dir)
+    .filter(f => f.endsWith(".mobileprovision"));
+
+  return files.length > 0;
+}
+
+function getLatestProfile(tenantId, bundleId) {
+
+  const dir = getProfileDir(tenantId, bundleId);
+
+  if (!fs.existsSync(dir)) return null;
+
+  const files = fs.readdirSync(dir)
+    .filter(f => f.endsWith(".mobileprovision"));
+
+  if (files.length === 0) return null;
+
+  return path.join(dir, files[0]);
+}
+
+/* ---------- WWDR ---------- */
+
+function installWWDR(keychain) {
+
+  const certPath =
+    path.join(__dirname, "AppleWWDRCAG3.cer");
+
+  if (!fs.existsSync(certPath)) return;
+
+  run("security", [
+    "import",
+    certPath,
+    "-k",
+    keychain,
+    "-T",
+    "/usr/bin/codesign",
+    "-T",
+    "/usr/bin/security"
+  ]);
 
   try {
+    run("security", [
+      "import",
+      certPath,
+      "-k",
+      "/Library/Keychains/System.keychain",
+      "-T",
+      "/usr/bin/codesign"
+    ]);
 
-    execFileSync(
-      "fastlane",
-      [
-        "produce",
-        "--username",
-        appleId,
-        "--app_identifier",
-        bundleId,
-        "--app_name",
-        appName,
-        "--team_id",
-        teamId,
-        "--skip_itc"
-      ],
-      {
-        stdio: "inherit"
-      }
-    );
-
-  } catch (err) {
-
-    console.log("[iosSigning] produce error");
-
-    console.log(err.stdout?.toString() || err.message);
-
-  }
-
-}
-
-/* ---------- provisioning ---------- */
-
-function hasProvision(bundleId) {
-
-  if (!fs.existsSync(PROFILE_DIR))
-    return false;
-
-  const files =
-    fs.readdirSync(PROFILE_DIR);
-
-  return files.some(f => f.includes(bundleId));
-
-}
-
-function createProvision({
-  bundleId,
-  appleId,
-  teamId
-}) {
-
-  console.log("[iosSigning] create provisioning:", bundleId);
-
-  execFileSync(
-    "fastlane",
-    [
-      "sigh",
-      "--development",
-      "--app_identifier",
-      bundleId,
-      "--team_id",
-      teamId
-    ],
-    {
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        FASTLANE_USER: appleId,
-        FASTLANE_TEAM_ID: teamId
-      }
-    }
-  );
-
+    run("security", [
+      "add-trusted-cert",
+      "-d",
+      "-k",
+      "/Library/Keychains/System.keychain",
+      certPath
+    ]);
+  } catch {}
 }
 
 /* ---------- keychain ---------- */
@@ -243,94 +192,131 @@ function createTempKeychain(jobId) {
   ensureDir(KEYCHAIN_DIR);
 
   const keychain =
-    path.join(
-      KEYCHAIN_DIR,
-      `wraply-${jobId}.keychain-db`
-    );
+    path.join(KEYCHAIN_DIR, `wraply-${jobId}.keychain-db`);
 
-  const password =
-    "wraply-temp";
+  const password = "wraply-temp";
 
-  console.log(
-    "[iosSigning] create keychain:",
+  run("security", ["create-keychain", "-p", password, keychain]);
+  run("security", ["unlock-keychain", "-p", password, keychain]);
+  run("security", ["set-keychain-settings", "-lut", "21600", keychain]);
+
+  // run("security", [
+  //   "list-keychains",
+  //   "-d",
+  //   "user",
+  //   "-s",
+  //   keychain,
+  //   `${process.env.HOME}/Library/Keychains/login.keychain-db`,
+  //   "/Library/Keychains/System.keychain"
+  // ]);
+
+  run("security", [
+    "list-keychains",
+    "-d",
+    "user",
+    "-s",
     keychain
-  );
+  ]);
 
-  execFileSync(
-    "security",
-    [
-      "create-keychain",
-      "-p",
-      password,
-      keychain
-    ]
-  );
+  run("security", [
+    "default-keychain",
+    "-s",
+    keychain
+  ]);
 
-  execFileSync(
-    "security",
-    [
-      "unlock-keychain",
-      "-p",
-      password,
-      keychain
-    ]
-  );
+  // run("security", [
+  //   "set-key-partition-list",
+  //   "-S",
+  //   "apple-tool:,apple:,codesign:",
+  //   "-s",
+  //   "-k",
+  //   password,
+  //   keychain
+  // ]);
 
-  execFileSync(
-    "security",
-    [
-      "set-keychain-settings",
-      "-lut",
-      "21600",
-      keychain
-    ]
-  );
+  installWWDR(keychain);
 
-  execFileSync(
-    "security",
-    [
-      "list-keychains",
-      "-d",
-      "user",
-      "-s",
-      keychain,
-      `${process.env.HOME}/Library/Keychains/login.keychain-db`,
-      "/Library/Keychains/System.keychain"
-    ]
-  );
 
-  execFileSync(
-    "security",
-    [
-      "default-keychain",
-      "-s",
-      keychain
-    ]
-  );
-
-  return keychain;
-
+  return { keychain, password };
 }
 
-/* ---------- keychain cleanup ---------- */
+function deleteTempKeychain(keychainPath) {
 
-function deleteTempKeychain(keychain) {
-
-  if (!keychain)
-    return;
+  if (!keychainPath) return;
 
   try {
-
-    execFileSync(
-      "security",
-      [
-        "delete-keychain",
-        keychain
-      ]
-    );
-
+    execFileSync("security", [
+      "delete-keychain",
+      keychainPath
+    ]);
   } catch {}
+}
 
+/* ---------- cert import ---------- */
+
+function importP12ToKeychain(tenantId, keychain, keychainPassword) {
+
+  const certPath = getCertPath(tenantId);
+  const passPath = getCertPassPath(tenantId);
+
+  if (!fs.existsSync(certPath))
+    throw new Error("p12 not found");
+
+  const certPass =
+    fs.existsSync(passPath)
+      ? fs.readFileSync(passPath, "utf8")
+      : "";
+
+  run("security", [
+    "import",
+    certPath,
+    "-k",
+    keychain,
+    "-P",
+    certPass,
+    "-T",
+    "/usr/bin/codesign",
+    "-T",
+    "/usr/bin/security"
+  ]);
+
+  run("security", [
+    "set-key-partition-list",
+    "-S",
+    "apple-tool:,apple:,codesign:",
+    "-s",
+    "-k",
+    keychainPassword,
+    keychain
+  ]);
+}
+
+/* ---------- profile ---------- */
+
+function saveProfileToStorage(tenantId, bundleId, uuid, profilePath) {
+
+  const destDir = getProfileDir(tenantId, bundleId);
+
+  ensureDir(destDir);
+
+  const destPath =
+    path.join(destDir, `${uuid}.mobileprovision`);
+
+  fs.copyFileSync(profilePath, destPath);
+
+  return destPath;
+}
+
+/* ---------- validate ---------- */
+
+function validateApiKey(apiKeyPath) {
+
+  const resolved = resolveApiKeyPath(apiKeyPath);
+
+  if (!fs.existsSync(resolved))
+    throw new Error("ASC key not found");
+
+  return resolved;
 }
 
 /* ---------- main ---------- */
@@ -338,9 +324,8 @@ function deleteTempKeychain(keychain) {
 async function ensureIOSSigning({
 
   jobId,
+  tenantId,
   bundleId,
-  appleId,
-  teamId,
   mode,
   apiKeyId,
   apiIssuerId,
@@ -348,96 +333,58 @@ async function ensureIOSSigning({
 
 }) {
 
-  if (!bundleId)
-    throw new Error("bundleId missing");
+  ensureDir(SIGNING_ROOT);
+  ensureDir(getTenantDir(tenantId));
 
-  ensureDir(CERT_DIR);
-  ensureDir(PROFILE_DIR);
+  if (mode !== "api_key")
+    throw new Error("Only api_key mode supported");
 
-  ensureWWDR();
+  const resolvedKeyPath =
+    validateApiKey(apiKeyPath);
 
-  /* ---------- API KEY MODE ---------- */
-
-  if (mode === "api_key") {
-
-    console.log("[iosSigning] mode: api_key");
-
-    const keychain =
-      createTempKeychain(jobId);
-
-    return {
-      keychainPath: keychain,
-      env: {
-        ASC_KEY_ID: apiKeyId,
-        ASC_ISSUER_ID: apiIssuerId,
-        ASC_KEY_PATH: apiKeyPath
-      }
-    };
-
-  }
-
-  /* ---------- APPLE LOGIN MODE ---------- */
-
-  await acquireLock();
-
-  try {
-
-    if (!hasCertificate()) {
-
-      createCertificate({
-        appleId,
-        teamId
-      });
-
-    } else {
-
-      console.log(
-        "[iosSigning] reuse certificate"
-      );
-
-    }
-
-    if (!hasProvision(bundleId)) {
-
-      ensureAppId({
-        bundleId,
-        appName: bundleId.replace(/\./g, " "),
-        appleId,
-        teamId
-      });
-
-      createProvision({
-        bundleId,
-        appleId,
-        teamId
-      });
-
-    } else {
-
-      console.log(
-        "[iosSigning] reuse provisioning:",
-        bundleId
-      );
-
-    }
-
-  } finally {
-
-    releaseLock();
-
-  }
-
-  const keychain =
+  const { keychain, password } =
     createTempKeychain(jobId);
+
+  const certExists = hasCert(tenantId);
+
+  if (certExists) {
+
+    importP12ToKeychain(
+      tenantId,
+      keychain,
+      password
+    );
+
+  }
 
   return {
     keychainPath: keychain,
-    env: {}
+    hasCert: certExists,
+    p12Path: certExists ? getCertPath(tenantId) : null,
+    p12Password: certExists
+      ? fs.readFileSync(getCertPassPath(tenantId), "utf8")
+      : null,
+    env: {
+      ASC_KEY_ID: apiKeyId,
+      ASC_ISSUER_ID: apiIssuerId,
+      ASC_KEY_PATH: resolvedKeyPath,
+      FASTLANE_KEYCHAIN_PATH: keychain,
+      FASTLANE_KEYCHAIN_PASSWORD: password
+    }
   };
 
 }
 
 module.exports = {
   ensureIOSSigning,
-  deleteTempKeychain
+  deleteTempKeychain,
+  exportP12FromKeychain, // ✅ 추가
+  hasIdentity,           // ✅ 추가
+  hasCert,
+  hasProfile,
+  getProfilePath,
+  getLatestProfile,
+  saveProfileToStorage,
+  getCertPath,
+  getCertPassPath
 };

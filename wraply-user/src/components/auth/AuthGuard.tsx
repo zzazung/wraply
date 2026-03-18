@@ -1,14 +1,21 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 
-import useAuth from "@/hooks/useAuth";
+import { useAuthStore } from "@/stores/authStore";
 
 export default function AuthGuard(){
 
-  const { user } = useAuth();
+  const token = useAuthStore((s)=>s.token);
+  const location = useLocation();
 
-  if(!user){
+  if (!token){
 
-    return <Navigate to="/login" replace />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: location }}
+      />
+    );
 
   }
 

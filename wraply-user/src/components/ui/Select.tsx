@@ -2,7 +2,7 @@ import type { SelectHTMLAttributes } from "react";
 
 interface Props extends SelectHTMLAttributes<HTMLSelectElement>{}
 
-export default function Select({
+function Select({
 
   className="",
 
@@ -40,3 +40,5 @@ export default function Select({
   );
 
 }
+
+export { Select };

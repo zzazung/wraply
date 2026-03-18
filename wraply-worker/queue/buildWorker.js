@@ -13,7 +13,18 @@ const { registerBuild, unregisterBuild } = require("./buildRegistry");
 const { startHeartbeat, stopHeartbeat } = require("../bus/heartbeatBus");
 
 const { ensureAndroidSigning } = require("../lib/androidSigning");
-const { ensureIOSSigning, deleteTempKeychain } = require("../lib/iosSigning");
+const {
+  ensureIOSSigning,
+  deleteTempKeychain,
+  exportP12FromKeychain,   // ✅ 추가
+  hasIdentity,             // ✅ 추가
+  hasCert,
+  hasProfile,
+  getLatestProfile,
+  saveProfileToStorage,
+  getCertPath,
+  getCertPassPath
+} = require("../lib/iosSigning");
 
 const WRAPLY_ROOT = process.env.WRAPLY_ROOT || path.resolve(process.cwd(), "..");
 
@@ -43,6 +54,33 @@ function sha256(filePath) {
   return hash.digest("hex");
 }
 
+function stripAnsi(str) {
+  return str.replace(/\x1B\[[0-9;]*m/g, "")
+}
+
+function parseProfilePath(text) {
+
+  const match = text.match(/WRAPLY_PROFILE_PATH=(.+)/);
+
+  if (!match) return null;
+
+  return stripAnsi(match[1].trim());
+
+}
+
+function parseProfileUUID(text) {
+
+  const match = text.match(/WRAPLY_PROFILE_UUID=(.+)/);
+
+  if (!match) return null;
+
+  return stripAnsi(match[1].trim());
+
+}
+
+/**
+ * artifact 저장 (tenant isolation 적용)
+ */
 async function saveArtifact(jobId, tenantId, platform, filePath, versionName, versionCode) {
 
   if (!fs.existsSync(filePath)) {
@@ -53,12 +91,14 @@ async function saveArtifact(jobId, tenantId, platform, filePath, versionName, ve
   const stat = fs.statSync(filePath);
   const name = path.basename(filePath);
 
-  const versionDir = versionName && versionCode
+  const versionDir =
+    versionName && versionCode
       ? `${versionName}_${versionCode}`
       : "unknown";
 
   const artifactDir = path.join(
     ARTIFACT_ROOT,
+    tenantId,
     platform,
     jobId,
     versionDir
@@ -76,6 +116,7 @@ async function saveArtifact(jobId, tenantId, platform, filePath, versionName, ve
   const relPath = path.relative(WRAPLY_ROOT, dest);
 
   let type = null;
+
   if (name.endsWith(".apk")) type = "apk";
   if (name.endsWith(".aab")) type = "aab";
   if (name.endsWith(".ipa")) type = "ipa";
@@ -104,7 +145,10 @@ async function transition(jobId, nextState) {
 
   console.log("[worker] transition:", jobId, nextState);
 
-  const rows = await query(`SELECT status FROM jobs WHERE job_id=?`, [jobId]);
+  const rows = await query(
+    `SELECT status FROM jobs WHERE job_id=?`,
+    [jobId]
+  );
 
   if (!rows || rows.length === 0) {
     console.error("[worker] job not found:", jobId);
@@ -135,7 +179,10 @@ async function transition(jobId, nextState) {
 }
 
 async function updateHeartbeat(jobId) {
-  await query(`UPDATE jobs SET heartbeat_at=NOW() WHERE job_id=?`, [jobId]);
+  await query(
+    `UPDATE jobs SET heartbeat_at=NOW() WHERE job_id=?`,
+    [jobId]
+  );
 }
 
 async function runBuild(job) {
@@ -157,9 +204,20 @@ async function runBuild(job) {
     let versionName = null;
     let versionCode = null;
 
+    let certCreated = false;
     let iosKeychain = null;
 
-    const workspaceRoot = path.join(PROJECT_ROOT, platform, safeName, jobId);
+    /**
+     * workspace (tenant isolation 적용)
+     */
+    const workspaceRoot = path.join(
+      PROJECT_ROOT,
+      tenantId,
+      platform,
+      safeName,
+      jobId
+    );
+
     const workspace = path.join(workspaceRoot, "source");
 
     ensureDir(workspace);
@@ -167,6 +225,7 @@ async function runBuild(job) {
 
     let heartbeatTimer = null;
     let heartbeatDB = null;
+    let signing = null;
 
     try {
 
@@ -174,7 +233,11 @@ async function runBuild(job) {
         UPDATE jobs
         SET worker_id=?, build_host=?, updated_at=NOW()
         WHERE job_id=?
-      `, [WORKER_ID, BUILD_HOST, jobId]);
+      `, [
+        WORKER_ID,
+        BUILD_HOST,
+        jobId
+      ]);
 
       await transition(jobId, STATES.PREPARING);
 
@@ -183,11 +246,17 @@ async function runBuild(job) {
 
       let signingEnv = {};
 
-      /* ---------- Android ---------- */
-
+      /**
+       * Android Signing
+       */
       if (platform === "android") {
 
-        const signing = await ensureAndroidSigning(packageName, safeName);
+        signing =
+          await ensureAndroidSigning(
+            tenantId,
+            packageName,
+            safeName
+          );
 
         signingEnv = {
           ANDROID_KEYSTORE_PATH: signing.keystorePath,
@@ -198,8 +267,9 @@ async function runBuild(job) {
 
       }
 
-      /* ---------- iOS ---------- */
-
+      /**
+       * iOS Signing
+       */
       else if (platform === "ios") {
 
         const signingRows = await query(`
@@ -207,31 +277,64 @@ async function runBuild(job) {
           FROM ios_signing_assets
           WHERE tenant_id=? AND bundle_id=?
           LIMIT 1
-        `,[tenantId, packageName]);
+        `, [
+          tenantId,
+          packageName
+        ]);
 
         if (!signingRows || signingRows.length === 0)
           throw new Error("iOS signing asset not found");
 
         const asset = signingRows[0];
 
-        const signing = await ensureIOSSigning({
+        console.log("[worker] asset:", asset);
+
+        signing = await ensureIOSSigning({
           jobId,
+          tenantId,
           bundleId: packageName,
-          appleId: process.env.APPLE_ID,
-          teamId: process.env.DEVELOPER_TEAM_ID,
+          // appleId: process.env.APPLE_ID,
+          // teamId: process.env.DEVELOPER_TEAM_ID,
           mode: asset.mode,
           apiKeyId: asset.api_key_id,
           apiIssuerId: asset.api_issuer_id,
           apiKeyPath: asset.api_key_path
         });
 
+        console.log("[worker] signing result:", signing);
+
         iosKeychain = signing.keychainPath;
+
+        const certExists = hasCert(tenantId);
+        const profileExists = hasProfile(tenantId, packageName);
+        const certPath = getCertPath(tenantId);
+        const passPath = getCertPassPath(tenantId);
+        console.log("[worker] certExists:", certExists);
+        console.log("[worker] profileExists:", profileExists);
+        console.log("[worker] certPath:", certPath);
+        console.log("[worker] passPath:", passPath);
 
         signingEnv = {
           ...signing.env,
-          ASC_KEY_PATH: path.join(WRAPLY_ROOT, signing.env.ASC_KEY_PATH)
+          CODE_SIGN_IDENTITY: "Apple Distribution",
+          HAS_CERT: certExists ? "true" : "false",
+          HAS_PROFILE: profileExists ? "true" : "false",
+          TEAM_ID: asset.team_id,
         };
 
+        if (certExists) {
+          signingEnv.P12_PATH = certPath;
+          signingEnv.P12_PASSWORD = fs.existsSync(passPath)
+            ? fs.readFileSync(passPath, "utf8")
+            : "";
+        }
+
+        if (profileExists) {
+          const profilePath = getLatestProfile(tenantId, packageName);
+          signingEnv.PROFILE_PATH = profilePath;
+          signingEnv.PROFILE_UUID =
+            path.basename(profilePath).replace(".mobileprovision", "");
+        }
       }
 
       const workerRoot = path.resolve(__dirname, "..");
@@ -246,11 +349,18 @@ async function runBuild(job) {
 
       console.log("[worker] spawn build start");
       console.log("[worker] build script:", buildScript);
-      console.log("[worker] args:", jobId, safeName, packageName, appName, url);
 
       const proc = spawn(
         "bash",
-        [buildScript, jobId, safeName, packageName, appName, url],
+        [
+          buildScript,
+          jobId,
+          tenantId,
+          safeName,
+          packageName,
+          appName,
+          url
+        ],
         {
           cwd: WRAPLY_ROOT,
           env: {
@@ -272,8 +382,12 @@ async function runBuild(job) {
 
       let stdoutBuffer = "";
 
+      let profilePathTemp = null;
+      let profileUUIDTemp = null;
+
       proc.stdout.on("data", async d => {
 
+        // stdoutBuffer += stripAnsi(d.toString());
         stdoutBuffer += d.toString();
 
         const lines = stdoutBuffer.split("\n");
@@ -318,6 +432,40 @@ async function runBuild(job) {
 
           }
 
+          if (text.includes("WRAPLY_CERT_CREATED=true")) {
+            certCreated = true;
+          }
+
+          if (text.includes("WRAPLY_PROFILE_PATH=")) {
+
+            profilePathTemp = parseProfilePath(text);
+
+          }
+
+          if (text.includes("WRAPLY_PROFILE_UUID=")) {
+
+            profileUUIDTemp = parseProfileUUID(text);
+
+          }
+
+          if (profilePathTemp && profileUUIDTemp) {
+
+            try {
+              saveProfileToStorage(
+                tenantId,
+                packageName,
+                profileUUIDTemp,
+                profilePathTemp
+              );
+            } catch (e) {
+              console.error("[worker] profile save failed:", e.message);
+            }
+
+            profilePathTemp = null
+            profileUUIDTemp = null
+
+          }
+
         }
 
       });
@@ -333,8 +481,71 @@ async function runBuild(job) {
         clearInterval(heartbeatDB);
         stopHeartbeat(heartbeatTimer);
 
+        /* ---------- save certificate ---------- */
+
+        if (platform === 'ios' && code === 0) {
+
+          try {
+            spawn("security", [
+              "set-key-partition-list",
+              "-S",
+              "apple-tool:,apple:,codesign:",
+              "-s",
+              "-k",
+              "wraply-temp",
+              iosKeychain
+            ]);
+          } catch (e) {
+            console.log("[worker] partition skip:", e.message);
+          }
+
+          const identityExists = hasIdentity(iosKeychain);
+
+          console.log("[worker] identityExists:", identityExists);
+          console.log("[worker] certCreated:", certCreated);
+
+          if (identityExists && !hasCert(tenantId)) {
+
+            console.log("[worker] exporting p12");
+
+            try {
+
+              exportP12FromKeychain(
+                tenantId,
+                iosKeychain,
+                "wraply-temp"
+              );
+
+            } catch (e) {
+
+              console.log("[worker] p12 export skipped:", e.message);
+
+            }
+
+          } else {
+
+            console.log("[worker] skip p12 export");
+
+          }
+
+        }
+
+        /* ---------- keychain cleanup ---------- */
+
+        if (platform === 'ios') {
+
+          spawn(
+            "security",
+            ["find-identity", "-v", "-p", "codesigning", iosKeychain],
+            { stdio: "inherit" }
+          );
+          
+        }
+
         if (iosKeychain)
           deleteTempKeychain(iosKeychain);
+
+        /* ---------- 상태 처리 ---------- */
 
         if (code === 0) {
 
@@ -386,6 +597,42 @@ async function runBuild(job) {
 
   });
 
+}
+async function saveCertToStorage({ tenantId, bundleId, p12Path, password }) {
+
+  console.log("[worker] save cert:", p12Path);
+
+  const fileName = path.basename(p12Path);
+
+  const destDir = path.join(
+    WRAPLY_ROOT,
+    "signing",
+    "ios",
+    "certs",
+    tenantId
+  );
+
+  ensureDir(destDir);
+
+  const destPath = path.join(destDir, fileName);
+
+  fs.copyFileSync(p12Path, destPath);
+
+  const relPath = path.relative(WRAPLY_ROOT, destPath);
+
+  await query(`
+    UPDATE ios_signing_assets
+    SET certificate_name=?, p12_path=?, p12_password=?, updated_at=NOW()
+    WHERE tenant_id=? AND bundle_id=?
+  `, [
+    fileName,
+    relPath,
+    password,
+    tenantId,
+    bundleId
+  ]);
+
+  console.log("[worker] cert saved:", relPath);
 }
 
 module.exports = { runBuild };

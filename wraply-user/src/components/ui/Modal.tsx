@@ -8,7 +8,7 @@ interface Props{
 
 }
 
-export default function Modal({
+function Modal({
 
   children,
 
@@ -52,3 +52,5 @@ export default function Modal({
   );
 
 }
+
+export { Modal };

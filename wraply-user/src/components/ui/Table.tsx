@@ -6,7 +6,7 @@ interface Props{
 
 }
 
-export default function Table({
+function Table({
 
   children
 
@@ -28,3 +28,5 @@ export default function Table({
   );
 
 }
+
+export { Table };

@@ -5,7 +5,7 @@ import { fetchProjectBuilds } from "@/services/builds";
 
 import PageHeader from "@/components/layout/PageHeader";
 import BuildStatusBadge from "@/components/build/BuildStatusBadge";
-import Spinner from "@/components/ui/Spinner";
+import { Spinner } from "@/components/ui/Spinner";
 
 import type { Build } from "@/types/build";
 

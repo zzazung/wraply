@@ -2,20 +2,22 @@
 set -euo pipefail
 
 JOB_ID="${1:-}"
-SAFE_NAME="${2:-}"
-PACKAGE_NAME="${3:-}"
-APP_NAME="${4:-}"
-URL="${5:-}"
+TENANT_ID="${2:-}"
+SAFE_NAME="${3:-}"
+PACKAGE_NAME="${4:-}"
+APP_NAME="${5:-}"
+URL="${6:-}"
 
 echo "===== BUILD SCRIPT START ====="
 echo "JOB_ID=$JOB_ID"
+echo "TENANT_ID=$TENANT_ID"
 echo "SAFE_NAME=$SAFE_NAME"
 echo "PACKAGE_NAME=$PACKAGE_NAME"
 echo "APP_NAME=$APP_NAME"
 echo "URL=$URL"
 
-if [[ -z "$JOB_ID" || -z "$SAFE_NAME" || -z "$PACKAGE_NAME" || -z "$APP_NAME" || -z "$URL" ]]; then
-  echo "❌ Usage: ./build_android_fastlane.sh <job_id> <safe_name> <package_name> <app_name> <url>"
+if [[ -z "$JOB_ID" || -z "$TENANT_ID" || -z "$SAFE_NAME" || -z "$PACKAGE_NAME" || -z "$APP_NAME" || -z "$URL" ]]; then
+  echo "❌ Usage: ./build_android_fastlane.sh <job_id> <tenant_id> <safe_name> <package_name> <app_name> <url>"
   exit 1
 fi
 
@@ -23,8 +25,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKER_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CI_ROOT="$(cd "$WORKER_ROOT/.." && pwd)"
 
-PROJECT_DIR="$CI_ROOT/projects/android/$SAFE_NAME/$JOB_ID/source"
-mkdir -p "$CI_ROOT/projects/android/$SAFE_NAME/$JOB_ID"
+PROJECT_DIR="$CI_ROOT/projects/$TENANT_ID/android/$SAFE_NAME/$JOB_ID/source"
+mkdir -p "$CI_ROOT/projects/$TENANT_ID/android/$SAFE_NAME/$JOB_ID"
 
 TMP_OUT="$CI_ROOT/builds/android/$SAFE_NAME/_tmp_$JOB_ID"
 mkdir -p "$TMP_OUT"
@@ -58,7 +60,13 @@ trap finalize_logs EXIT
 
 echo "WRAPLY_STATE=PREPARING"
 
-"$SCRIPT_DIR/sync_from_templates.sh" --platform android --safe "$SAFE_NAME" --job "$JOB_ID" --ci-root "$CI_ROOT" --log "$SYNC_LOG"
+"$SCRIPT_DIR/sync_from_templates.sh" \
+  --platform android \
+  --tenant "$TENANT_ID" \
+  --safe "$SAFE_NAME" \
+  --job "$JOB_ID" \
+  --ci-root "$CI_ROOT" \
+  --log "$SYNC_LOG"
 
 # -------------------------------------------------------------------
 # 2) patch project
@@ -69,6 +77,7 @@ echo "WRAPLY_STATE=PATCHING"
 (
   "$SCRIPT_DIR/patch_android.sh" \
   "$JOB_ID" \
+  "$TENANT_ID" \
   "$SAFE_NAME" \
   "$PACKAGE_NAME" \
   "$APP_NAME" \
@@ -138,6 +147,7 @@ LOG_FILE="$OUT_DIR/build.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "🤖 Android Fastlane Build"
+echo "📦 TENANT: $TENANT_ID"
 echo "📦 SAFE_NAME: $SAFE_NAME"
 echo "📦 PACKAGE: $PACKAGE_NAME"
 echo "📌 VERSION: $VERSION"

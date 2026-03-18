@@ -69,3 +69,11 @@ export async function requestBuild(
   return res.data;
 
 }
+
+export async function fetchRecentBuilds(){
+
+  const res = await api.get("/jobs");
+
+  return res.data.items;
+
+}

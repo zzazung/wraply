@@ -3,24 +3,30 @@ import { useNavigate } from "react-router-dom";
 
 import { Button, Input, Card, CardContent, WraplyLogo } from "@/components/ui";
 
-import { login } from "@/services/auth";
+import { register } from "@/services/auth";
 import { useAuthStore } from "@/stores/authStore";
 
-export default function LoginPage(){
+export default function RegisterPage(){
 
   const navigate = useNavigate();
   const setAuth = useAuthStore((s)=>s.setAuth);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleSubmit = async () => {
 
-    if (!email || !password){
-      setError("이메일과 비밀번호를 입력해주세요");
+    if (!email || !password || !confirm){
+      setError("모든 항목을 입력해주세요");
+      return;
+    }
+
+    if (password !== confirm){
+      setError("비밀번호가 일치하지 않습니다");
       return;
     }
 
@@ -29,7 +35,7 @@ export default function LoginPage(){
       setError("");
       setLoading(true);
 
-      const res = await login({
+      const res = await register({
         email,
         password
       });
@@ -47,7 +53,7 @@ export default function LoginPage(){
 
     }catch(err){
       console.error(err);
-      setError("로그인에 실패했습니다");
+      setError("회원가입에 실패했습니다");
     }finally{
       setLoading(false);
     }
@@ -76,13 +82,13 @@ export default function LoginPage(){
           <div className="space-y-4">
 
             <h1 className="text-4xl font-semibold leading-tight">
-              URL 하나로
+              지금 바로
               <br />
-              앱 완성
+              앱을 만들어보세요
             </h1>
 
             <p className="text-sm opacity-80 leading-relaxed">
-              앱을 만들고 바로 사용할 수 있어요
+              복잡한 과정 없이 바로 시작할 수 있어요
             </p>
 
           </div>
@@ -91,7 +97,7 @@ export default function LoginPage(){
 
       </div>
 
-      {/* 우측 Login */}
+      {/* 우측 Register */}
       <div className="flex items-center justify-center p-8 bg-background">
 
         <Card className="w-full max-w-md shadow-xl border">
@@ -101,11 +107,11 @@ export default function LoginPage(){
             <div className="text-center space-y-2">
 
               <h2 className="text-2xl font-semibold tracking-tight">
-                로그인
+                무료로 시작하기
               </h2>
 
               <p className="text-sm text-muted-foreground">
-                Wraply를 시작하세요
+                몇 초면 계정이 만들어집니다
               </p>
 
             </div>
@@ -125,6 +131,13 @@ export default function LoginPage(){
                 onChange={(e)=>setPassword(e.target.value)}
               />
 
+              <Input
+                type="password"
+                placeholder="비밀번호 확인"
+                value={confirm}
+                onChange={(e)=>setConfirm(e.target.value)}
+              />
+
               {error && (
                 <div className="text-sm text-red-500">
                   {error}
@@ -136,20 +149,20 @@ export default function LoginPage(){
                 onClick={handleSubmit}
                 disabled={loading}
               >
-                {loading ? "로그인 중..." : "로그인"}
+                {loading ? "가입 중..." : "무료로 시작하기"}
               </Button>
 
             </div>
 
             <div className="text-center text-sm">
 
-              계정이 없나요?{" "}
+              이미 계정이 있나요?{" "}
 
               <span
                 className="underline cursor-pointer hover:text-primary"
-                onClick={()=>navigate("/register")}
+                onClick={()=>navigate("/login")}
               >
-                회원가입
+                로그인
               </span>
 
             </div>

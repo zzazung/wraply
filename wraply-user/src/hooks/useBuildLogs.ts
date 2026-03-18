@@ -1,6 +1,6 @@
 import { useEffect,useState } from "react";
 
-export default function useBuildLogs(jobId:string){
+export function useBuildLogs(jobId:string){
 
   const [logs,setLogs] = useState<string[]>([]);
 
