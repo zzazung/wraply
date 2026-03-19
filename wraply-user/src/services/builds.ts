@@ -10,9 +10,7 @@ export async function fetchProjectBuilds(
 ):Promise<Build[]>{
 
   const res = await api.get<BuildListResponse>(
-
     `/projects/${projectId}/builds`
-
   );
 
   return res.data.items;
@@ -25,19 +23,17 @@ export async function getJob(
   jobId:string
 ):Promise<Build>{
 
-  const res = await api.get<Build>(
-
-    `/jobs/${jobId}`
-
-  );
+  const res = await api.get<Build>(`/jobs/${jobId}`);
 
   return res.data;
 
 }
 
-/* 빌드 요청 */
+/* 🔥 빌드 요청 (createJob으로 통일) */
 
-export interface BuildRequestPayload{
+export interface CreateJobPayload{
+
+  projectId:string;
 
   platform:"android"|"ios";
 
@@ -51,24 +47,17 @@ export interface BuildRequestPayload{
 
 }
 
-export async function requestBuild(
-  projectId:string,
-  payload:BuildRequestPayload
+export async function createJob(
+  payload:CreateJobPayload
 ){
 
-  const res = await api.post(
+  const res = await api.post("/jobs", payload);
 
-    "/jobs",
-    {
-      projectId,
-      ...payload
-    }
-
-  );
-
-  return res.data;
+  return res.data; // { success, jobId }
 
 }
+
+/* 최근 빌드 */
 
 export async function fetchRecentBuilds(){
 

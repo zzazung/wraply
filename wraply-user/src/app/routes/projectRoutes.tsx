@@ -27,7 +27,7 @@ export const projectRoutes = (
 
   <Route path="/projects">
 
-    <Route
+    {/* <Route
       index
       element={<ProjectPage />}
     />
@@ -40,7 +40,16 @@ export const projectRoutes = (
     <Route
       path=":projectId"
       element={<ProjectDetailPage />}
-    />
+    /> */}
+
+    {/* 프로젝트 목록 */}
+    <Route path="/projects" element={<ProjectPage />} />
+
+    {/* 프로젝트 생성 */}
+    <Route path="/projects/new" element={<ProjectCreatePage />} />
+
+    {/* 프로젝트 상세 */}
+    <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
 
   </Route>
 

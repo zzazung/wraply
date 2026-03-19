@@ -1,110 +1,149 @@
-import { useProjects } from "@/hooks/useProjects";
-import { useBuild } from "@/hooks/useBuild";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-import BuildCard from "@/components/build/BuildCard";
-import BuildHistoryTable from "@/components/build/BuildHistoryTable";
-import BuildLauncher from "@/components/build/BuildLauncher";
-import BuildEmpty from "@/components/build/BuildEmpty";
+import { Button, Input, Card, CardContent } from "@/components/ui";
 
-export default function BuildCenterPage(){
+import { createProject } from "@/services/projects";
+import { createJob } from "@/services/builds";
 
-  const builds = useBuild();
+export default function ProjectCreatePage(){
 
-  const running = builds.filter(
-    (b)=>b.status === "running"
-  );
+  const navigate = useNavigate();
 
-  const queued = builds.filter(
-    (b)=>b.status === "queued"
-  );
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [platform, setPlatform] = useState<"android" | "ios">("android");
 
-  const history = builds.filter(
-    (b)=>b.status === "finished" || b.status === "failed"
-  );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async () => {
+
+    if (!name || !url){
+      setError("앱 이름과 URL을 입력해주세요");
+      return;
+    }
+
+    try{
+
+      setError("");
+      setLoading(true);
+
+      // 1️⃣ 프로젝트 생성
+      const project = await createProject({
+        name,
+        packageName: "com.wraply.app" // 🔥 임시 자동값
+      });
+
+      // 2️⃣ 빌드 요청
+      const job = await createJob({
+        projectId: project.id,
+        platform,
+        packageName: "com.wraply.app",
+        appName: name,
+        url,
+        scheme: null
+      });
+
+      // 3️⃣ 빌드 화면 이동
+      navigate(`/builds/${job.jobId}`);
+
+    }catch(err:any){
+
+      console.error(err);
+
+      const message =
+        err?.response?.data?.error ||
+        "앱 생성에 실패했습니다";
+
+      setError(message);
+
+    }finally{
+      setLoading(false);
+    }
+
+  };
 
   return(
 
-    <div className="space-y-10">
+    <div className="flex items-center justify-center min-h-[80vh] p-6">
 
-      <div className="flex justify-between items-center">
+      <Card className="w-full max-w-lg shadow-xl">
 
-        <h1 className="text-2xl font-semibold">
-          빌드 센터
-        </h1>
+        <CardContent className="p-8 space-y-8">
 
-        <BuildLauncher/>
+          {/* 헤더 */}
+          <div className="space-y-2 text-center">
 
-      </div>
+            <h1 className="text-2xl font-semibold">
+              앱 만들기
+            </h1>
 
-      {/* Running Builds */}
-
-      <section className="space-y-4">
-
-        <h2 className="text-lg font-semibold">
-          진행 중 빌드
-        </h2>
-
-        {running.length === 0 ? (
-
-          <BuildEmpty label="진행 중인 빌드가 없습니다"/>
-
-        ) : (
-
-          <div className="grid gap-4 md:grid-cols-2">
-
-            {running.map((build)=>(
-              <BuildCard
-                key={build.jobId}
-                build={build}
-              />
-            ))}
+            <p className="text-sm text-muted-foreground">
+              URL을 입력하면 바로 앱이 생성됩니다
+            </p>
 
           </div>
 
-        )}
+          {/* 입력 */}
+          <div className="space-y-4">
 
-      </section>
+            <Input
+              placeholder="앱 이름 (예: My App)"
+              value={name}
+              onChange={(e)=>setName(e.target.value)}
+              disabled={loading}
+            />
 
-      {/* Queue */}
+            <Input
+              placeholder="https://example.com"
+              value={url}
+              onChange={(e)=>setUrl(e.target.value)}
+              disabled={loading}
+            />
 
-      <section className="space-y-4">
+            {/* 플랫폼 선택 */}
+            <div className="flex gap-2">
 
-        <h2 className="text-lg font-semibold">
-          대기 중 빌드
-        </h2>
+              <Button
+                variant={platform === "android" ? "primary" : "outline"}
+                onClick={()=>setPlatform("android")}
+                disabled={loading}
+              >
+                Android
+              </Button>
 
-        {queued.length === 0 ? (
+              <Button
+                variant={platform === "ios" ? "primary" : "outline"}
+                onClick={()=>setPlatform("ios")}
+                disabled={loading}
+              >
+                iOS
+              </Button>
 
-          <BuildEmpty label="대기 중인 빌드가 없습니다"/>
+            </div>
 
-        ) : (
+            {/* 에러 */}
+            {error && (
+              <div className="text-sm text-red-500">
+                {error}
+              </div>
+            )}
 
-          <div className="grid gap-4 md:grid-cols-2">
-
-            {queued.map((build)=>(
-              <BuildCard
-                key={build.jobId}
-                build={build}
-              />
-            ))}
+            {/* CTA */}
+            <Button
+              className="w-full h-11 text-base shadow-md"
+              onClick={handleSubmit}
+              disabled={loading}
+            >
+              {loading ? "앱 생성 중..." : "앱 만들기"}
+            </Button>
 
           </div>
 
-        )}
+        </CardContent>
 
-      </section>
-
-      {/* History */}
-
-      <section className="space-y-4">
-
-        <h2 className="text-lg font-semibold">
-          최근 빌드
-        </h2>
-
-        <BuildHistoryTable builds={history}/>
-
-      </section>
+      </Card>
 
     </div>
 

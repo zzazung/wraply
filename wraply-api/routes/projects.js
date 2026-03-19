@@ -1,12 +1,12 @@
 // wraply-api/routes/projects.js
 
-const express = require("express")
-const { v4: uuidv4 } = require("uuid")
+const express = require("express");
+const { v4: uuidv4 } = require("uuid");
 
-const tenantDb = require("../lib/tenantDb")
-const requireAuth = require("../middleware/auth")
+const tenantDb = require("../lib/tenantDb");
+const { requireAuth } = require("../middleware/auth");
 
-const { enqueueBuild } = require("../queue/buildQueue")
+const { enqueueBuild } = require("../queue/buildQueue");
 
 const router = express.Router()
 

@@ -1,18 +1,21 @@
-const WebSocket = require("ws");
-const redis = require("@wraply/shared/redis");
-const { query } = require("@wraply/shared/db");
+// wraply-api/websocket/index.js
+
+const WebSocket = require("ws")
+const redis = require("@wraply/shared/redis")
+const jwt = require("../lib/jwt")
+const { query } = require("@wraply/shared/db")
 
 const {
   LOG_CHANNEL,
   STATUS_CHANNEL,
   HEARTBEAT_CHANNEL
-} = require("@wraply/shared/constants/queues");
+} = require("@wraply/shared/constants/queues")
 
-const jobClients = new Map();
+const jobClients = new Map()
 
-let wss = null;
-let redisSub = null;
-let heartbeatInterval = null;
+let wss = null
+let redisSub = null
+let heartbeatInterval = null
 
 /* --------------------------------------------------
    broadcast
@@ -20,37 +23,37 @@ let heartbeatInterval = null;
 
 function broadcast(jobId, payload) {
 
-  const clients = jobClients.get(jobId);
-  if (!clients) return;
+  const clients = jobClients.get(jobId)
+  if (!clients) return
 
-  const message = JSON.stringify(payload);
+  const message = JSON.stringify(payload)
 
   for (const ws of [...clients]) {
 
     if (ws.readyState === WebSocket.OPEN) {
 
       try {
-        ws.send(message);
+        ws.send(message)
       } catch (err) {
-        console.error("ws send error:", err);
-        clients.delete(ws);
+        console.error("ws send error:", err)
+        clients.delete(ws)
       }
 
     } else {
 
-      clients.delete(ws);
+      clients.delete(ws)
 
     }
 
   }
 
   if (clients.size === 0)
-    jobClients.delete(jobId);
+    jobClients.delete(jobId)
 
 }
 
 /* --------------------------------------------------
-   broadcast helpers
+   helpers
 -------------------------------------------------- */
 
 function broadcastLog(jobId, message) {
@@ -60,7 +63,7 @@ function broadcastLog(jobId, message) {
     jobId,
     message,
     ts: Date.now()
-  });
+  })
 
 }
 
@@ -72,7 +75,7 @@ function broadcastStatus(jobId, status, progress) {
     status,
     progress,
     ts: Date.now()
-  });
+  })
 
 }
 
@@ -85,13 +88,18 @@ async function updateHeartbeat(jobId, tenantId) {
   try {
 
     await query(
-      "UPDATE jobs SET heartbeat_at = NOW() WHERE job_id=? AND tenant_id=?",
+      `
+      UPDATE jobs
+      SET heartbeat_at = NOW()
+      WHERE job_id = ?
+      AND tenant_id = ?
+      `,
       [jobId, tenantId]
-    );
+    )
 
   } catch (err) {
 
-    console.error("heartbeat update error:", err);
+    console.error("heartbeat update error:", err)
 
   }
 
@@ -103,56 +111,44 @@ async function updateHeartbeat(jobId, tenantId) {
 
 function initRedisSubscriber() {
 
-  if (redisSub) return;
+  if (redisSub) return
 
-  redisSub = redis.duplicate();
+  redisSub = redis.duplicate()
 
   redisSub.subscribe(
     LOG_CHANNEL,
     STATUS_CHANNEL,
     HEARTBEAT_CHANNEL
-  );
-
-  redisSub.on("ready", () => {
-    console.log("Redis subscriber ready");
-  });
-
-  redisSub.on("error", err => {
-    console.error("Redis subscriber error:", err);
-  });
-
-  redisSub.on("reconnecting", () => {
-    console.log("Redis reconnecting...");
-  });
+  )
 
   redisSub.on("message", async (channel, msg) => {
 
-    let data;
+    let data
 
     try {
-      data = JSON.parse(msg);
+      data = JSON.parse(msg)
     } catch (err) {
-      console.error("redis parse error:", err);
-      return;
+      console.error("redis parse error:", err)
+      return
     }
 
-    if (!data || !data.jobId) return;
+    if (!data?.jobId) return
 
     if (channel === HEARTBEAT_CHANNEL) {
-      await updateHeartbeat(data.jobId, data.tenantId);
-      return;
+      await updateHeartbeat(data.jobId, data.tenantId)
+      return
     }
 
     if (channel === LOG_CHANNEL) {
-      broadcastLog(data.jobId, data.message);
-      return;
+      broadcastLog(data.jobId, data.message)
+      return
     }
 
     if (channel === STATUS_CHANNEL) {
-      broadcastStatus(data.jobId, data.status, data.progress);
+      broadcastStatus(data.jobId, data.status, data.progress)
     }
 
-  });
+  })
 
 }
 
@@ -162,109 +158,124 @@ function initRedisSubscriber() {
 
 function startWebSocket(server) {
 
-  if (wss) {
-    console.log("WebSocket already started");
-    return wss;
-  }
+  if (wss) return wss
 
-  wss = new WebSocket.Server({ server });
+  wss = new WebSocket.Server({ server })
 
-  initRedisSubscriber();
+  initRedisSubscriber()
 
   wss.on("connection", async (ws, req) => {
 
     try {
 
-      const url = new URL(req.url, "http://localhost");
+      const url = new URL(req.url, "http://localhost")
 
-      const jobId = url.searchParams.get("jobId");
-      const tenantId = url.searchParams.get("tenantId");
+      const token = url.searchParams.get("token")
+      const jobId = url.searchParams.get("jobId")
 
-      if (!jobId || !tenantId) {
-        ws.close();
-        return;
+      if (!token || !jobId) {
+        ws.close()
+        return
       }
 
+      /**
+       * 🔥 JWT 검증 (핵심)
+       */
+      const payload = jwt.verifyToken(token)
+
+      if (
+        !payload ||
+        typeof payload.userId !== "string" ||
+        typeof payload.tenantId !== "string"
+      ) {
+        ws.close()
+        return
+      }
+
+      const tenantId = payload.tenantId
+
+      /**
+       * 🔥 job tenant 검증 (핵심)
+       */
       const rows = await query(
-        "SELECT tenant_id FROM jobs WHERE job_id=? LIMIT 1",
+        `
+        SELECT tenant_id
+        FROM jobs
+        WHERE job_id = ?
+        LIMIT 1
+        `,
         [jobId]
-      );
+      )
 
       if (!rows.length || rows[0].tenant_id !== tenantId) {
-        ws.close();
-        return;
+        ws.close()
+        return
       }
 
+      /**
+       * 🔥 연결 등록
+       */
       if (!jobClients.has(jobId))
-        jobClients.set(jobId, new Set());
+        jobClients.set(jobId, new Set())
 
-      jobClients.get(jobId).add(ws);
+      jobClients.get(jobId).add(ws)
 
-      ws.isAlive = true;
+      ws.isAlive = true
+      ws.tenantId = tenantId
+      ws.jobId = jobId
 
       ws.on("pong", () => {
-        ws.isAlive = true;
-      });
+        ws.isAlive = true
+      })
 
       ws.on("close", () => {
 
-        const clients = jobClients.get(jobId);
-        if (!clients) return;
+        const clients = jobClients.get(jobId)
+        if (!clients) return
 
-        clients.delete(ws);
+        clients.delete(ws)
 
         if (clients.size === 0)
-          jobClients.delete(jobId);
+          jobClients.delete(jobId)
 
-      });
+      })
 
       ws.on("error", err => {
-        console.error("ws error:", err);
-        try { ws.close(); } catch {}
-      });
+        console.error("ws error:", err)
+        try { ws.close() } catch {}
+      })
 
     } catch (err) {
 
-      console.error("WebSocket error:", err);
-      try { ws.close(); } catch {}
+      console.error("WebSocket error:", err)
+      try { ws.close() } catch {}
 
     }
 
-  });
+  })
 
   heartbeatInterval = setInterval(() => {
 
     wss.clients.forEach(ws => {
 
       if (ws.isAlive === false) {
-        try { ws.terminate(); } catch {}
-        return;
+        try { ws.terminate() } catch {}
+        return
       }
 
-      ws.isAlive = false;
+      ws.isAlive = false
 
       try {
-        ws.ping();
+        ws.ping()
       } catch {
-        try { ws.terminate(); } catch {}
+        try { ws.terminate() } catch {}
       }
 
-    });
+    })
 
-  }, 30000);
+  }, 30000)
 
-  wss.on("close", () => {
-
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
-    }
-
-  });
-
-  console.log("WebSocket server started");
-
-  return wss;
+  return wss
 
 }
 
@@ -277,32 +288,25 @@ async function closeWebSocket() {
   try {
 
     if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
+      clearInterval(heartbeatInterval)
+      heartbeatInterval = null
     }
 
     if (wss) {
-      await new Promise(resolve => wss.close(resolve));
-      wss = null;
+      await new Promise(resolve => wss.close(resolve))
+      wss = null
     }
 
     if (redisSub) {
-
-      try {
-        await redisSub.quit();
-      } catch {}
-
-      redisSub = null;
-
+      try { await redisSub.quit() } catch {}
+      redisSub = null
     }
 
-    jobClients.clear();
-
-    console.log("WebSocket server closed");
+    jobClients.clear()
 
   } catch (err) {
 
-    console.error("closeWebSocket error:", err);
+    console.error("closeWebSocket error:", err)
 
   }
 
@@ -313,4 +317,4 @@ module.exports = {
   closeWebSocket,
   broadcastLog,
   broadcastStatus
-};
+}

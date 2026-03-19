@@ -1,6 +1,6 @@
 import { useState,useEffect } from "react";
 
-import { requestBuild,fetchProjectBuilds,getJob } from "@/services/builds";
+import { createJob,fetchProjectBuilds,getJob } from "@/services/builds";
 
 import type { BuildJob } from "@/types/build";
 
@@ -92,7 +92,7 @@ export default function BuildRequestModal({
 
       setLoading(true);
 
-      const job = await requestBuild(
+      const job = await createJob(
         projectId,
         {
           platform,

@@ -1,36 +1,38 @@
-const express = require("express");
-const { v4: uuidv4 } = require("uuid");
-const fs = require("fs");
-const path = require("path");
+// wraply-api/routes/jobs.js
 
-const { query } = require("@wraply/shared/db");
-const { enqueueBuild } = require("../queue/buildQueue");
-const { CANCEL_CHANNEL } = require("@wraply/shared/constants/queues");
+const express = require("express")
+const { v4: uuidv4 } = require("uuid")
+const fs = require("fs")
+const path = require("path")
 
-const { requireAuth } = require("../middleware/auth");
+const tenantDb = require("../lib/tenantDb")
+const { enqueueBuild } = require("../queue/buildQueue")
+const { CANCEL_CHANNEL } = require("@wraply/shared/constants/queues")
 
-const router = express.Router();
+const { requireAuth } = require("../middleware/auth")
 
-router.use(requireAuth);
+const router = express.Router()
 
-const CI_ROOT = process.env.CI_ROOT || process.cwd();
+router.use(requireAuth)
+
+const CI_ROOT = process.env.CI_ROOT || process.cwd()
 
 /**
  * 안전한 CI_ROOT 내부 경로만 허용
  */
 function safeAbsPathFromCiRoot(relPath) {
 
-  if (!relPath) return null;
+  if (!relPath) return null
 
-  const normalized = relPath.replace(/\\/g, "/");
+  const normalized = relPath.replace(/\\/g, "/")
 
-  if (normalized.includes("..")) return null;
+  if (normalized.includes("..")) return null
 
-  const abs = path.resolve(CI_ROOT, normalized);
+  const abs = path.resolve(CI_ROOT, normalized)
 
-  if (!abs.startsWith(path.resolve(CI_ROOT))) return null;
+  if (!abs.startsWith(path.resolve(CI_ROOT))) return null
 
-  return abs;
+  return abs
 
 }
 
@@ -40,19 +42,19 @@ function rmrf(absPath) {
 
     if (absPath && fs.existsSync(absPath)) {
 
-      fs.rmSync(absPath, { recursive: true, force: true });
+      fs.rmSync(absPath, { recursive: true, force: true })
 
-      return true;
+      return true
 
     }
 
   } catch (err) {
 
-    console.error("rmrf error:", err);
+    console.error("rmrf error:", err)
 
   }
 
-  return false;
+  return false
 
 }
 
@@ -60,9 +62,10 @@ function rmrf(absPath) {
  * Job 생성
  */
 router.post("/", async (req, res) => {
+
   try {
 
-    const { tenantId } = req.user;
+    const db = tenantDb(req)
 
     const {
       projectId,
@@ -71,74 +74,61 @@ router.post("/", async (req, res) => {
       appName,
       url,
       scheme
-    } = req.body;
+    } = req.body
 
     if (
       typeof projectId !== "string" ||
       typeof platform !== "string" ||
       typeof packageName !== "string"
     ) {
-      return res.status(400).json({ error: "Invalid fields" });
+      return res.status(400).json({ error: "Invalid fields" })
     }
 
-    const jobId = `job_${uuidv4()}`;
-    const safeName = packageName.replace(/\./g, "_");
+    /**
+     * 🔥 project 소유권 검증 (핵심)
+     */
+    const project = await db.projects.findById(projectId)
 
-    await query(
-      `
-      INSERT INTO jobs
-      (
-        job_id,
-        tenant_id,
-        project_id,
-        platform,
-        package_name,
-        safe_name,
-        app_name,
-        url,
-        scheme,
-        status,
-        progress,
-        worker_id,
-        build_host
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0, NULL, NULL)
-      `,
-      [
-        jobId,
-        tenantId,
-        projectId,
-        platform,
-        packageName,
-        safeName,
-        appName || null,
-        url || null,
-        scheme || null
-      ]
-    );
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    const jobId = uuidv4()
+    const safeName = packageName.replace(/\./g, "_")
+
+    await db.jobs.create({
+      id: jobId,
+      projectId,
+      platform,
+      packageName,
+      safeName,
+      appName,
+      url,
+      scheme
+    })
 
     await enqueueBuild({
       jobId,
-      tenantId,
+      tenantId: req.user.tenantId,
       projectId,
       platform,
       packageName,
       safeName,
       appName,
       url
-    });
+    })
 
-    res.json({ success: true, jobId });
+    res.json({ success: true, jobId })
 
   } catch (e) {
 
-    console.error("job create error:", e);
+    console.error("job create error:", e)
 
-    res.status(500).json({ error: String(e) });
+    res.status(500).json({ error: "internal error" })
 
   }
 
-});
+})
 
 /**
  * Job History
@@ -147,47 +137,21 @@ router.get("/", async (req, res) => {
 
   try {
 
-    const { tenantId } = req.user;
+    const db = tenantDb(req)
 
-    const rows = await query(
-      `
-      SELECT
-        job_id,
-        tenant_id,
-        project_id,
-        platform,
-        package_name,
-        safe_name,
-        app_name,
-        url,
-        scheme,
-        status,
-        progress,
-        worker_id,
-        build_host,
-        created_at,
-        updated_at,
-        finished_at,
-        error_reason
-      FROM jobs
-      WHERE tenant_id=?
-      ORDER BY created_at DESC
-      LIMIT 100
-      `,
-      [tenantId]
-    );
+    const jobs = await db.jobs.list()
 
-    res.json({ items: rows });
+    res.json({ items: jobs })
 
   } catch (err) {
 
-    console.error("job list error:", err);
+    console.error("job list error:", err)
 
-    res.status(500).json({ error: "internal error" });
+    res.status(500).json({ error: "internal error" })
 
   }
 
-});
+})
 
 /**
  * Job Detail
@@ -196,29 +160,25 @@ router.get("/:jobId", async (req, res) => {
 
   try {
 
-    const { tenantId } = req.user;
-    const { jobId } = req.params;
+    const db = tenantDb(req)
 
-    const rows = await query(
-      `SELECT * FROM jobs WHERE job_id=? AND tenant_id=? LIMIT 1`,
-      [jobId, tenantId]
-    );
+    const job = await db.jobs.findById(req.params.jobId)
 
-    if (!rows.length) {
-      return res.status(404).json({ error: "Job not found" });
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" })
     }
 
-    res.json(rows[0]);
+    res.json(job)
 
   } catch (err) {
 
-    console.error("job detail error:", err);
+    console.error("job detail error:", err)
 
-    res.status(500).json({ error: "internal error" });
+    res.status(500).json({ error: "internal error" })
 
   }
 
-});
+})
 
 /**
  * Job Log
@@ -227,39 +187,33 @@ router.get("/:jobId/log", async (req, res) => {
 
   try {
 
-    const { tenantId } = req.user;
-    const { jobId } = req.params;
+    const db = tenantDb(req)
 
-    const rows = await query(
-      `SELECT log_path FROM jobs WHERE job_id=? AND tenant_id=?`,
-      [jobId, tenantId]
-    );
+    const job = await db.jobs.findById(req.params.jobId)
 
-    if (!rows.length || !rows[0].log_path)
-      return res.status(404).json({ error: "Log not found" });
+    if (!job || !job.log_path) {
+      return res.status(404).json({ error: "Log not found" })
+    }
 
-    const logPath = rows[0].log_path;
+    const abs = safeAbsPathFromCiRoot(job.log_path)
 
-    const abs = path.isAbsolute(logPath)
-      ? logPath
-      : path.join(CI_ROOT, logPath);
+    if (!abs || !fs.existsSync(abs)) {
+      return res.status(404).json({ error: "Log file missing" })
+    }
 
-    if (!fs.existsSync(abs))
-      return res.status(404).json({ error: "Log file missing" });
+    res.setHeader("Content-Type", "text/plain; charset=utf-8")
 
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-
-    fs.createReadStream(abs).pipe(res);
+    fs.createReadStream(abs).pipe(res)
 
   } catch (err) {
 
-    console.error("log read error:", err);
+    console.error("log read error:", err)
 
-    res.status(500).json({ error: "internal error" });
+    res.status(500).json({ error: "internal error" })
 
   }
 
-});
+})
 
 /**
  * Job Artifacts
@@ -268,46 +222,21 @@ router.get("/:jobId/artifacts", async (req, res) => {
 
   try {
 
-    const { tenantId } = req.user;
-    const { jobId } = req.params;
+    const db = tenantDb(req)
 
-    const rows = await query(
-      `
-      SELECT
-        id,
-        platform,
-        name,
-        path,
-        size,
-        created_at
-      FROM artifacts
-      WHERE job_id=? AND tenant_id=?
-      `,
-      [jobId, tenantId]
-    );
+    const items = await db.artifacts.listByJob(req.params.jobId)
 
-    const items = rows
-      .filter(r => r.path && !r.path.includes(".."))
-      .map(r => ({
-        id: r.id,
-        platform: r.platform,
-        name: r.name,
-        downloadUrl: `/downloads/${r.path}`,
-        size: r.size,
-        createdAt: r.created_at
-      }));
-
-    res.json({ items });
+    res.json({ items })
 
   } catch (err) {
 
-    console.error("artifact list error:", err);
+    console.error("artifact list error:", err)
 
-    res.status(500).json({ error: "internal error" });
+    res.status(500).json({ error: "internal error" })
 
   }
 
-});
+})
 
 /**
  * Job Cancel
@@ -316,106 +245,94 @@ router.post("/:jobId/cancel", async (req, res) => {
 
   try {
 
-    const { tenantId } = req.user;
-    const { jobId } = req.params;
+    const db = tenantDb(req)
 
-    const rows = await query(
-      `SELECT status FROM jobs WHERE job_id=? AND tenant_id=?`,
-      [jobId, tenantId]
-    );
+    const job = await db.jobs.findById(req.params.jobId)
 
-    if (!rows.length)
-      return res.status(404).json({ error: "Job not found" });
+    if (!job)
+      return res.status(404).json({ error: "Job not found" })
 
     const { isTerminal } =
-      require("@wraply/shared/job/jobState");
+      require("@wraply/shared/job/jobState")
 
-    if (isTerminal(rows[0].status))
-      return res.status(400).json({ error: "Job already finished" });
+    if (isTerminal(job.status))
+      return res.status(400).json({ error: "Job already finished" })
 
-    const redis = require("../lib/redis");
+    const redis = require("../lib/redis")
 
     await redis.publish(
       CANCEL_CHANNEL,
-      JSON.stringify({ jobId, tenantId })
-    );
+      JSON.stringify({
+        jobId: job.job_id,
+        tenantId: req.user.tenantId
+      })
+    )
 
-    res.json({ success: true });
+    res.json({ success: true })
 
   } catch (err) {
 
-    console.error("job cancel error:", err);
+    console.error("job cancel error:", err)
 
-    res.status(500).json({ error: "internal error" });
+    res.status(500).json({ error: "internal error" })
 
   }
 
-});
+})
 
 /**
  * Job Delete
  */
 router.delete("/", async (req, res) => {
 
-  const { tenantId } = req.user;
-
-  const jobIds = Array.isArray(req.body?.jobIds)
-    ? req.body.jobIds
-    : [];
-
-  if (!jobIds.length)
-    return res.status(400).json({ error: "jobIds is required" });
-
   try {
 
-    const placeholders = jobIds.map(() => "?").join(",");
+    const db = tenantDb(req)
 
-    const rows = await query(
-      `
-      SELECT job_id, artifact_dir, log_path
-      FROM jobs
-      WHERE tenant_id=? AND job_id IN (${placeholders})
-      `,
-      [tenantId, ...jobIds]
-    );
+    const jobIds = Array.isArray(req.body?.jobIds)
+      ? req.body.jobIds
+      : []
 
-    const deletedFiles = [];
+    if (!jobIds.length)
+      return res.status(400).json({ error: "jobIds is required" })
 
-    for (const r of rows) {
+    const jobs = await db.jobs.findMany(jobIds)
 
-      const artifactAbs = safeAbsPathFromCiRoot(r.artifact_dir);
-      const logAbs = safeAbsPathFromCiRoot(r.log_path);
+    const deletedFiles = []
+
+    for (const job of jobs) {
+
+      const artifactAbs =
+        safeAbsPathFromCiRoot(job.artifact_dir)
+
+      const logAbs =
+        safeAbsPathFromCiRoot(job.log_path)
 
       if (artifactAbs && rmrf(artifactAbs))
-        deletedFiles.push({ jobId: r.job_id });
+        deletedFiles.push({ jobId: job.job_id })
 
       if (logAbs && rmrf(logAbs))
-        deletedFiles.push({ jobId: r.job_id });
+        deletedFiles.push({ jobId: job.job_id })
 
     }
 
-    const delJobs = await query(
-      `
-      DELETE FROM jobs
-      WHERE tenant_id=? AND job_id IN (${placeholders})
-      `,
-      [tenantId, ...jobIds]
-    );
+    const deletedCount =
+      await db.jobs.deleteMany(jobIds)
 
     res.json({
       success: true,
-      deletedCount: delJobs.affectedRows ?? 0,
+      deletedCount,
       deletedFiles
-    });
+    })
 
   } catch (err) {
 
-    console.error("job delete error:", err);
+    console.error("job delete error:", err)
 
-    res.status(500).json({ error: "internal error" });
+    res.status(500).json({ error: "internal error" })
 
   }
 
-});
+})
 
-module.exports = router;
+module.exports = router
