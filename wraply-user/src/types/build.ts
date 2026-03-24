@@ -1,9 +1,11 @@
 export type BuildStatus =
-  | "pending"
-  | "running"
-  | "finished"
-  | "failed"
-  | "cancelled";
+  | "PREPARING"
+  | "PATCHING"
+  | "BUILDING"
+  | "SIGNING"
+  | "UPLOADING"
+  | "FINISHED"
+  | "FAILED";
 
 export type Platform =
   | "android"
@@ -13,24 +15,22 @@ export interface Build {
 
   jobId:string;
 
+  projectId:string;
+
+  appName:string;
+
   platform:Platform;
 
   status:BuildStatus;
 
-  progress:number;
+  progress?:number;
 
-  createdAt:number;
+  createdAt:string;
 
-  updatedAt:number;
+  updatedAt?:string;
 
-  finishedAt:number | null;
+  finishedAt?:string | null;
 
-  error:string | null;
-
-}
-
-export interface BuildListResponse {
-
-  items:Build[];
+  error?:string | null;
 
 }

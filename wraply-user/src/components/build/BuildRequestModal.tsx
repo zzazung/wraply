@@ -37,37 +37,26 @@ export default function BuildRequestModal({
 
         const lastJob = builds[0] as BuildJob;
 
-        const jobDetail = await getJob(lastJob.job_id);
-        console.log(jobDetail);
+        const jobDetail = await getJob(lastJob.jobId);
 
-        if(jobDetail.app_name){
-
-          setAppName(jobDetail.app_name);
-
+        if (jobDetail.appName){
+          setAppName(jobDetail.appName);
         }
 
-        if(jobDetail.package_name){
-
-          setPackageName(jobDetail.package_name);
-
+        if (jobDetail.packageName){
+          setPackageName(jobDetail.packageName);
         }
 
-        if(jobDetail.url){
-
+        if (jobDetail.url){
           setUrl(jobDetail.url);
-
         }
 
-        if(jobDetail.scheme){
-
+        if (jobDetail.scheme){
           setScheme(jobDetail.scheme);
-
         }
 
-        if(jobDetail.platform){
-
+        if (jobDetail.platform){
           setPlatform(jobDetail.platform);
-
         }
 
       }catch{
@@ -93,8 +82,8 @@ export default function BuildRequestModal({
       setLoading(true);
 
       const job = await createJob(
-        projectId,
         {
+          projectId,
           platform,
           appName,
           packageName,

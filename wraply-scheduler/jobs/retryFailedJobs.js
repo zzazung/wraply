@@ -1,42 +1,39 @@
-const { query } = require("@wraply/shared/db");
+const { query, queryWithTenant } = require("@wraply/shared/db");
 const { enqueueBuild } = require("@wraply/shared/queue");
-const { STATES } = require("@wraply/shared/job/jobState");
 
 async function retryFailedJobs() {
 
-  console.log("Retry failed jobs");
-
   const rows = await query(`
-    SELECT job_id, project_id
+    SELECT job_id, tenant_id, retry_count, max_retry
     FROM jobs
-    WHERE status = ?
-      AND retry_count < max_retry
-  `, [STATES.FAILED]);
-
-  if (!rows || rows.length === 0) return;
+    WHERE status='failed'
+  `);
 
   for (const job of rows) {
 
-    console.log("Retry job", job.job_id);
+    if (job.retry_count >= job.max_retry) continue;
+
+    console.log("[scheduler] retry job:", job.job_id);
+
+    await queryWithTenant(
+      job.tenant_id,
+      `
+      UPDATE jobs
+      SET status='queued',
+          retry_count=retry_count+1,
+          updated_at=NOW()
+      WHERE job_id=?
+      `,
+      [job.job_id]
+    );
 
     await enqueueBuild({
       jobId: job.job_id,
-      projectId: job.project_id
+      tenantId: job.tenant_id
     });
-
-    await query(`
-      UPDATE jobs
-      SET
-        status = ?,
-        retry_count = retry_count + 1,
-        updated_at = NOW()
-      WHERE job_id = ?
-    `, [STATES.QUEUED, job.job_id]);
 
   }
 
 }
 
-module.exports = {
-  retryFailedJobs
-};
+module.exports = { retryFailedJobs };

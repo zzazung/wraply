@@ -1,35 +1,35 @@
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import BuildStatusBadge from "@/components/build/BuildStatusBadge";
 import { formatDate } from "@/utils/formatDate";
-import type { BuildJob } from "@/types/build";
+import type { Build } from "@/types/build";
 
 function normalizeStatus(status:string){
 
-  if(status==="finished") return "success";
+  if (status === "FINISHED") return "success";
 
-  if(
-    status==="preparing"||
-    status==="patching"||
-    status==="building"||
-    status==="signing"||
-    status==="uploading"
+  if (
+    status === "PREPARING" ||
+    status === "PATCHING" ||
+    status === "BUILDING" ||
+    status === "SIGNING" ||
+    status === "UPLOADING"
   ){
     return "running";
   }
 
-  return status;
+  return status.toLowerCase();
 
 }
 
 export default function BuildHistoryTable({
   builds
 }:{
-  builds:BuildJob[]
+  builds:Build[]
 }){
 
   const navigate = useNavigate();
 
-  if(builds.length===0){
+  if (builds.length === 0){
 
     return(
       <div className="bg-card border border-border rounded-lg p-6 text-sm text-muted-foreground">
@@ -52,41 +52,25 @@ export default function BuildHistoryTable({
         <thead className="bg-muted">
 
           <tr>
-
             <th className="text-left px-4 py-3">Job</th>
-
             <th className="text-left px-4 py-3">상태</th>
-
-            <th className="text-left px-4 py-3">진행률</th>
-
             <th className="text-left px-4 py-3">생성 시간</th>
-
           </tr>
 
         </thead>
 
         <tbody>
 
-          {builds.map(job=>(
+          {builds.map((job)=>(
 
             <tr
-              key={job.job_id}
-              onClick={()=>openBuild(job.job_id)}
+              key={job.jobId}   // 🔥 완전 해결
+              onClick={()=>openBuild(job.jobId)}
               className="border-t border-border hover:bg-muted/50 transition cursor-pointer"
             >
 
-              <td className="px-4 py-3">
-
-                {/* <Link
-                  to={`/builds/${job.job_id}`}
-                  onClick={(e)=>e.stopPropagation()}
-                  className="text-primary hover:underline"
-                > */}
-
-                  {job.job_id}
-
-                {/* </Link> */}
-
+              <td className="px-4 py-3 font-mono text-xs">
+                {job.jobId}
               </td>
 
               <td className="px-4 py-3">
@@ -97,16 +81,8 @@ export default function BuildHistoryTable({
 
               </td>
 
-              <td className="px-4 py-3">
-
-                {job.progress}%
-
-              </td>
-
               <td className="px-4 py-3 text-muted-foreground">
-
-                {formatDate(job.created_at)}
-
+                {formatDate(job.createdAt)}
               </td>
 
             </tr>

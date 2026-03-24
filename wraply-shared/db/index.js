@@ -1,5 +1,3 @@
-// wraply-shared/db/index.js
-
 const mysql = require("mysql2/promise")
 
 const pool = mysql.createPool({
@@ -13,76 +11,46 @@ const pool = mysql.createPool({
 })
 
 /**
- * tenant guard 대상 테이블
+ * 기본 query
+ * - SQL 변형 없음
+ * - tenant 강제 없음
+ * - 완전 raw 실행
  */
-const TENANT_TABLES = [
-  "projects",
-  "jobs",
-  "artifacts",
-  "users",
-  "android_signing_keys",
-  "ios_signing_assets",
-  "billing"
-]
+async function query(sql, params = []) {
 
-/**
- * SQL에 tenant_id 조건이 포함되어 있는지 검사
- */
-function hasTenantCondition(sql) {
+  const [rows] = await pool.query(sql, params)
 
-  const lower = sql.toLowerCase()
-
-  return lower.includes("tenant_id")
+  return rows
 
 }
 
 /**
- * tenant guard 검사
+ * 트랜잭션 helper
  */
-function validateTenantQuery(sql) {
+async function withTransaction(callback) {
 
-  const lower = sql.toLowerCase()
-
-  const isTarget = TENANT_TABLES.some(table =>
-    lower.includes(`from ${table}`) ||
-    lower.includes(`into ${table}`) ||
-    lower.includes(`update ${table}`)
-  )
-
-  if (!isTarget) return
-
-  if (!hasTenantCondition(sql)) {
-
-    console.error("❌ TENANT FILTER MISSING:\n", sql)
-
-    throw new Error("TENANT_FILTER_REQUIRED")
-
-  }
-
-}
-
-/**
- * query 실행
- */
-async function query(sql, params = [], options = {}) {
+  const conn = await pool.getConnection()
 
   try {
 
-    /**
-     * 🔥 tenant guard 실행
-     */
-    if (!options.skipTenantCheck) {
-      validateTenantQuery(sql)
-    }
+    await conn.beginTransaction()
 
-    const [rows] = await pool.query(sql, params)
+    const result = await callback(conn)
 
-    return rows
+    await conn.commit()
 
-  } catch (err) {
+    return result
 
-    console.error("DB error:", err.message)
+  }
+  catch (err) {
+
+    await conn.rollback()
     throw err
+
+  }
+  finally {
+
+    conn.release()
 
   }
 
@@ -90,5 +58,6 @@ async function query(sql, params = [], options = {}) {
 
 module.exports = {
   pool,
-  query
+  query,
+  withTransaction
 }

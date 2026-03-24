@@ -1,35 +1,30 @@
-const { query } = require("@wraply/shared/db");
-const JOB_STATE = require("@wraply/shared/job/jobState");
-
-/**
- * building 상태에서 오래 멈춘 job 복구
- */
+const { query, queryWithTenant } = require("@wraply/shared/db");
 
 async function recoverStuckJobs() {
 
-  console.log("Checking stuck jobs");
-
   const rows = await query(`
-    SELECT job_id
+    SELECT job_id, tenant_id
     FROM jobs
-    WHERE status = ?
-      AND updated_at < NOW() - INTERVAL 30 MINUTE
-  `, [JOB_STATE.BUILDING]);
-
-  if (!rows.length) return;
+    WHERE status IN ('preparing','building')
+      AND heartbeat_at < NOW() - INTERVAL 5 MINUTE
+  `);
 
   for (const job of rows) {
 
-    console.log("Recovering job", job.job_id);
+    console.log("[scheduler] recover stuck job:", job.job_id);
 
-    await query(`
+    await queryWithTenant(
+      job.tenant_id,
+      `
       UPDATE jobs
-      SET status = ?
-      WHERE job_id = ?
-    `, [JOB_STATE.FAILED, job.job_id]);
+      SET status='failed', updated_at=NOW()
+      WHERE job_id=?
+      `,
+      [job.job_id]
+    );
 
   }
 
 }
 
-module.exports = recoverStuckJobs;
+module.exports = { recoverStuckJobs };

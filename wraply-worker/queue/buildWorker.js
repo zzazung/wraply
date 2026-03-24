@@ -6,6 +6,7 @@ const { spawn } = require("child_process");
 const { v4: uuidv4 } = require("uuid");
 
 const { query } = require("@wraply/shared/db");
+
 const { STATES, getProgress, isValidTransition } = require("@wraply/shared/job/jobState");
 
 const { publishLog, publishStatus } = require("../bus/logBus");
@@ -141,13 +142,17 @@ async function saveArtifact(jobId, tenantId, platform, filePath, versionName, ve
 
 }
 
-async function transition(jobId, nextState) {
+async function transition(jobId, tenantId, nextState) {
 
-  console.log("[worker] transition:", jobId, nextState);
+  console.log("[worker] transition query", {
+    jobId,
+    tenantId,
+    nextState
+  });
 
   const rows = await query(
-    `SELECT status FROM jobs WHERE job_id=?`,
-    [jobId]
+    `SELECT status FROM jobs WHERE job_id=? AND tenant_id=?`,
+    [jobId, tenantId]
   );
 
   if (!rows || rows.length === 0) {
@@ -158,31 +163,39 @@ async function transition(jobId, nextState) {
   const current = rows[0].status;
 
   if (!isValidTransition(current, nextState)) {
-    await publishLog(jobId, `invalid transition ${current} -> ${nextState}`);
+    await publishLog(jobId, tenantId, `invalid transition ${current} -> ${nextState}`);
     return;
   }
 
   const progress = getProgress(nextState);
 
-  await publishStatus(jobId, nextState, progress);
+  await publishStatus(jobId, tenantId, nextState, progress);
 
-  await query(`
+  const result = await query(
+    `
     UPDATE jobs
     SET status=?, progress=?, updated_at=NOW()
-    WHERE job_id=?
-  `, [
-    nextState,
-    progress,
-    jobId
-  ]);
+    WHERE job_id=? AND tenant_id=?
+  `,
+    [
+      nextState,
+      progress,
+      jobId,
+      tenantId
+    ]
+  );
+
+  console.log("[worker] update result", JSON.stringify(result));
 
 }
 
-async function updateHeartbeat(jobId) {
+async function updateHeartbeat(jobId, tenantId) {
+
   await query(
-    `UPDATE jobs SET heartbeat_at=NOW() WHERE job_id=?`,
-    [jobId]
+    `UPDATE jobs SET heartbeat_at=NOW() WHERE job_id=? AND tenant_id=?`,
+    [jobId, tenantId]
   );
+
 }
 
 async function runBuild(job) {
@@ -203,6 +216,81 @@ async function runBuild(job) {
 
     let versionName = null;
     let versionCode = null;
+
+    const logDir = path.join(LOG_ROOT, tenantId, jobId);
+    ensureDir(logDir);
+
+    const logFile = path.join(logDir, "build.log");
+
+    /* 🔥 DB에 log_path 저장 */
+    await query(`
+      UPDATE jobs
+      SET log_path=?, updated_at=NOW()
+      WHERE job_id=? AND tenant_id=?
+    `, [
+      path.relative(WRAPLY_ROOT, logFile),
+      jobId,
+      tenantId
+    ]);
+
+    function writeLog(text) {
+      const clean = stripAnsi(text);
+      const line = `[${new Date().toISOString()}] ${clean}\n`;
+
+      try {
+        fs.appendFileSync(logFile, line);
+      } catch (e) {
+        console.error("[worker] log write fail:", e.message);
+      }
+    }
+
+    function handleLine(text) {
+
+      console.log("[build]", text);
+
+      writeLog(text);
+
+      publishLog(jobId, tenantId, text); // ❗ await 제거
+
+      /* ---------------- STATE ---------------- */
+      const stateMatch = text.match(/WRAPLY_STATE=(\w+)/);
+
+      if (stateMatch) {
+        const state = stateMatch[1].toLowerCase();
+        console.log("✅ state:", state);
+
+        transition(jobId, tenantId, state); // ❗ await 제거
+      }
+
+      /* ---------------- OUTPUT_DIR ---------------- */
+      if (text.includes("OUTPUT_DIR=")) {
+        const rel = text.split("=")[1].trim();
+        const candidate = path.join(WRAPLY_ROOT, rel);
+
+        const versionPart = path.basename(candidate);
+        const v = versionPart.split("_");
+
+        if (v.length === 2) {
+          versionName = v[0];
+          versionCode = parseInt(v[1], 10);
+        }
+      }
+
+      /* ---------------- ARTIFACT ---------------- */
+      if (text.includes("WRAPLY_ARTIFACT=")) {
+        const artifactPath = text.split("=")[1].trim();
+
+        saveArtifact(
+          jobId,
+          tenantId,
+          platform,
+          artifactPath,
+          versionName,
+          versionCode
+        );
+      }
+
+    }
 
     let certCreated = false;
     let iosKeychain = null;
@@ -229,26 +317,27 @@ async function runBuild(job) {
 
     try {
 
-      await query(`
+      await query(
+        `
         UPDATE jobs
         SET worker_id=?, build_host=?, updated_at=NOW()
-        WHERE job_id=?
-      `, [
-        WORKER_ID,
-        BUILD_HOST,
-        jobId
-      ]);
+        WHERE job_id=? AND tenant_id=?
+      `,
+        [
+          WORKER_ID,
+          BUILD_HOST,
+          jobId,
+          tenantId
+        ]
+      );
 
-      await transition(jobId, STATES.PREPARING);
+      await transition(jobId, tenantId, STATES.PREPARING);
 
       heartbeatTimer = startHeartbeat(jobId);
-      heartbeatDB = setInterval(() => updateHeartbeat(jobId), 10000);
+      heartbeatDB = setInterval(() => updateHeartbeat(jobId, tenantId), 10000);
 
       let signingEnv = {};
 
-      /**
-       * Android Signing
-       */
       if (platform === "android") {
 
         signing =
@@ -267,9 +356,6 @@ async function runBuild(job) {
 
       }
 
-      /**
-       * iOS Signing
-       */
       else if (platform === "ios") {
 
         const signingRows = await query(`
@@ -287,14 +373,10 @@ async function runBuild(job) {
 
         const asset = signingRows[0];
 
-        console.log("[worker] asset:", asset);
-
         signing = await ensureIOSSigning({
           jobId,
           tenantId,
           bundleId: packageName,
-          // appleId: process.env.APPLE_ID,
-          // teamId: process.env.DEVELOPER_TEAM_ID,
           mode: asset.mode,
           apiKeyId: asset.api_key_id,
           apiIssuerId: asset.api_issuer_id,
@@ -345,7 +427,7 @@ async function runBuild(job) {
           ? path.join(scriptsDir, "build_android_fastlane.sh")
           : path.join(scriptsDir, "build_ios_fastlane.sh");
 
-      await transition(jobId, STATES.BUILDING);
+      await transition(jobId, tenantId, STATES.BUILDING);
 
       console.log("[worker] spawn build start");
       console.log("[worker] build script:", buildScript);
@@ -390,7 +472,8 @@ async function runBuild(job) {
         // stdoutBuffer += stripAnsi(d.toString());
         stdoutBuffer += d.toString();
 
-        const lines = stdoutBuffer.split("\n");
+        // const lines = stdoutBuffer.split("\n");
+        const lines = stdoutBuffer.split(/\r?\n/);
         stdoutBuffer = lines.pop();
 
         for (const line of lines) {
@@ -398,73 +481,75 @@ async function runBuild(job) {
           const text = line.trim();
           if (!text) continue;
 
-          console.log("[build]", text);
+          handleLine(text);
 
-          await publishLog(jobId, text);
+          // console.log("[build]", text);
 
-          if (text.includes("OUTPUT_DIR=")) {
+          // await publishLog(jobId, text);
 
-            const rel = text.split("=")[1].trim();
-            const candidate = path.join(WRAPLY_ROOT, rel);
+          // if (text.includes("OUTPUT_DIR=")) {
 
-            const versionPart = path.basename(candidate);
-            const v = versionPart.split("_");
+          //   const rel = text.split("=")[1].trim();
+          //   const candidate = path.join(WRAPLY_ROOT, rel);
 
-            if (v.length === 2) {
-              versionName = v[0];
-              versionCode = parseInt(v[1], 10);
-            }
+          //   const versionPart = path.basename(candidate);
+          //   const v = versionPart.split("_");
 
-          }
+          //   if (v.length === 2) {
+          //     versionName = v[0];
+          //     versionCode = parseInt(v[1], 10);
+          //   }
 
-          if (text.includes("WRAPLY_ARTIFACT=")) {
+          // }
 
-            const artifactPath = text.split("=")[1].trim();
+          // if (text.includes("WRAPLY_ARTIFACT=")) {
 
-            await saveArtifact(
-              jobId,
-              tenantId,
-              platform,
-              artifactPath,
-              versionName,
-              versionCode
-            );
+          //   const artifactPath = text.split("=")[1].trim();
 
-          }
+          //   await saveArtifact(
+          //     jobId,
+          //     tenantId,
+          //     platform,
+          //     artifactPath,
+          //     versionName,
+          //     versionCode
+          //   );
 
-          if (text.includes("WRAPLY_CERT_CREATED=true")) {
-            certCreated = true;
-          }
+          // }
 
-          if (text.includes("WRAPLY_PROFILE_PATH=")) {
+          // if (text.includes("WRAPLY_CERT_CREATED=true")) {
+          //   certCreated = true;
+          // }
 
-            profilePathTemp = parseProfilePath(text);
+          // if (text.includes("WRAPLY_PROFILE_PATH=")) {
 
-          }
+          //   profilePathTemp = parseProfilePath(text);
 
-          if (text.includes("WRAPLY_PROFILE_UUID=")) {
+          // }
 
-            profileUUIDTemp = parseProfileUUID(text);
+          // if (text.includes("WRAPLY_PROFILE_UUID=")) {
 
-          }
+          //   profileUUIDTemp = parseProfileUUID(text);
 
-          if (profilePathTemp && profileUUIDTemp) {
+          // }
 
-            try {
-              saveProfileToStorage(
-                tenantId,
-                packageName,
-                profileUUIDTemp,
-                profilePathTemp
-              );
-            } catch (e) {
-              console.error("[worker] profile save failed:", e.message);
-            }
+          // if (profilePathTemp && profileUUIDTemp) {
 
-            profilePathTemp = null
-            profileUUIDTemp = null
+          //   try {
+          //     saveProfileToStorage(
+          //       tenantId,
+          //       packageName,
+          //       profileUUIDTemp,
+          //       profilePathTemp
+          //     );
+          //   } catch (e) {
+          //     console.error("[worker] profile save failed:", e.message);
+          //   }
 
-          }
+          //   profilePathTemp = null
+          //   profileUUIDTemp = null
+
+          // }
 
         }
 
@@ -475,6 +560,12 @@ async function runBuild(job) {
       });
 
       proc.on("close", async code => {
+        /* 🔥 마지막 남은 로그 처리 */
+        const text = stdoutBuffer.trim();
+
+        if (text) {
+          handleLine(text);
+        }
 
         unregisterBuild(jobId);
 
@@ -549,18 +640,21 @@ async function runBuild(job) {
 
         if (code === 0) {
 
-          await transition(jobId, STATES.FINISHED);
+          await transition(jobId, tenantId, STATES.FINISHED);
 
-          await query(`
+          await query(
+            `
             UPDATE jobs
             SET finished_at=NOW()
-            WHERE job_id=?
-          `, [jobId]);
+            WHERE job_id=? AND tenant_id=?
+          `,
+            [jobId, tenantId]
+          );
 
         }
         else {
 
-          await transition(jobId, STATES.FAILED);
+          await transition(jobId, tenantId, STATES.FAILED);
 
         }
 
@@ -576,12 +670,27 @@ async function runBuild(job) {
     }
     catch (err) {
 
-      await publishLog(jobId, err.message);
+      console.error("🔥 BUILD ERROR:", err)  // 추가
+
+      const lines = d.toString().split(/\r?\n/);
+
+      for (const line of lines) {
+
+        const text = line.trim();
+        if (!text) continue;
+
+        console.log("[build stderr]", text);
+
+        handleLine(text); // 🔥 동일 처리
+
+      }
+
+      await publishLog(jobId, tenantId, err.message);
 
       if (iosKeychain)
         deleteTempKeychain(iosKeychain);
 
-      await transition(jobId, STATES.FAILED);
+      await transition(jobId, tenantId, STATES.FAILED);
 
       clearInterval(heartbeatDB);
       stopHeartbeat(heartbeatTimer);
@@ -597,42 +706,6 @@ async function runBuild(job) {
 
   });
 
-}
-async function saveCertToStorage({ tenantId, bundleId, p12Path, password }) {
-
-  console.log("[worker] save cert:", p12Path);
-
-  const fileName = path.basename(p12Path);
-
-  const destDir = path.join(
-    WRAPLY_ROOT,
-    "signing",
-    "ios",
-    "certs",
-    tenantId
-  );
-
-  ensureDir(destDir);
-
-  const destPath = path.join(destDir, fileName);
-
-  fs.copyFileSync(p12Path, destPath);
-
-  const relPath = path.relative(WRAPLY_ROOT, destPath);
-
-  await query(`
-    UPDATE ios_signing_assets
-    SET certificate_name=?, p12_path=?, p12_password=?, updated_at=NOW()
-    WHERE tenant_id=? AND bundle_id=?
-  `, [
-    fileName,
-    relPath,
-    password,
-    tenantId,
-    bundleId
-  ]);
-
-  console.log("[worker] cert saved:", relPath);
 }
 
 module.exports = { runBuild };

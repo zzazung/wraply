@@ -1,41 +1,44 @@
 const express = require("express");
 const router = express.Router();
 
-const path = require("path");
-
 const {
-  getArtifact,
-  listVersions
+  getArtifactById
 } = require("@wraply/shared/storage/artifactStorage");
 
-function escapeHtml(str) {
-  return str.replace(/[&<>"']/g, function (m) {
-    return ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#039;"
-    })[m];
-  });
-}
-
-function findApk(jobId, version = null) {
-
-  const apk = getArtifact(jobId, "app-release.apk", version);
-
-  if (apk) return apk;
-
-  return null;
-
-}
-
-function renderPage(res, jobId, versionDir) {
+function renderPage(res, artifact) {
 
   const base = process.env.BASE_URL || "http://localhost:4000";
 
-  const apkUrl =
-    `${base}/artifacts/android/${jobId}/${versionDir}/app-release.apk`;
+  const fileUrl = `${base}/artifacts/${artifact.platform}/${artifact.path}`;
+
+  let installSection = "";
+
+  if (artifact.platform === "android") {
+
+    installSection = `
+      <a href="${fileUrl}">
+        <button>Download APK</button>
+      </a>
+    `;
+
+  } else if (artifact.platform === "ios") {
+
+    const manifestUrl =
+      `${base}/install/${artifact.id}/manifest.plist`;
+
+    const installUrl =
+      `itms-services://?action=download-manifest&url=${manifestUrl}`;
+
+    installSection = `
+      <a href="${installUrl}">
+        <button>Install iOS App</button>
+      </a>
+      <p style="color:#666;margin-top:10px">
+        Safari에서 열어주세요
+      </p>
+    `;
+
+  }
 
   res.setHeader("Content-Type", "text/html");
 
@@ -45,61 +48,92 @@ function renderPage(res, jobId, versionDir) {
 <title>Wraply Install</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body{font-family:Arial;padding:40px}
-button{padding:14px 22px;font-size:16px}
-.version{color:#666;margin-top:10px}
+body{font-family:Arial;padding:40px;text-align:center}
+button{padding:14px 22px;font-size:16px;margin-top:10px}
+.meta{color:#666;margin-top:10px}
 </style>
 </head>
 <body>
 
-<h2>Install Android Build</h2>
+<h2>${artifact.appName}</h2>
 
-<p>Job: ${jobId}</p>
-<p class="version">Version: ${versionDir}</p>
+<p class="meta">Platform: ${artifact.platform}</p>
 
-<a href="${apkUrl}">
-<button>Download APK</button>
-</a>
+${installSection}
 
 </body>
 </html>
 `);
 }
 
-/* ---------- latest ---------- */
+/* ---------- install ---------- */
 
-router.get("/:jobId", (req, res) => {
+router.get("/:artifactId", async (req, res) => {
 
-  const jobId = escapeHtml(req.params.jobId);
+  const { artifactId } = req.params;
 
-  const versions = listVersions(jobId)
-    .sort()
-    .reverse();
+  const artifact = getArtifactById(artifactId);
 
-  if (!versions.length) {
-    return res.status(404).send("APK not found");
+  if (!artifact) {
+    return res.status(404).send("Artifact not found");
   }
 
-  const versionDir = versions[0];
-
-  renderPage(res, jobId, versionDir);
+  renderPage(res, artifact);
 
 });
 
-/* ---------- specific version ---------- */
+/* ---------- iOS manifest ---------- */
 
-router.get("/:jobId/:version", (req, res) => {
+router.get("/:artifactId/manifest.plist", async (req, res) => {
 
-  const jobId = escapeHtml(req.params.jobId);
-  const version = escapeHtml(req.params.version);
+  const { artifactId } = req.params;
 
-  const apk = findApk(jobId, version);
+  const artifact = getArtifactById(artifactId);
 
-  if (!apk) {
-    return res.status(404).send("APK not found");
+  if (!artifact || artifact.platform !== "ios") {
+    return res.status(404).send("Not found");
   }
 
-  renderPage(res, jobId, version);
+  const base = process.env.BASE_URL || "http://localhost:4000";
+
+  const ipaUrl =
+    `${base}/artifacts/ios/${artifact.path}`;
+
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>
+  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+  <plist version="1.0">
+    <dict>
+      <key>items</key>
+      <array>
+        <dict>
+          <key>assets</key>
+          <array>
+            <dict>
+              <key>kind</key>
+              <string>software-package</string>
+              <key>url</key>
+              <string>${ipaUrl}</string>
+            </dict>
+          </array>
+          <key>metadata</key>
+          <dict>
+            <key>bundle-identifier</key>
+            <string>${artifact.bundleId}</string>
+            <key>bundle-version</key>
+            <string>${artifact.version}</string>
+            <key>kind</key>
+            <string>software</string>
+            <key>title</key>
+            <string>${artifact.appName}</string>
+          </dict>
+        </dict>
+      </array>
+    </dict>
+  </plist>`;
+
+  res.set("Content-Type", "application/xml");
+  res.send(plist);
 
 });
 

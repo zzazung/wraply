@@ -5,7 +5,7 @@ const crypto = require("crypto");
 const { spawn } = require("child_process");
 const { encrypt, decrypt } = require("./crypto");
 
-const CI_ROOT = process.env.CI_ROOT || process.cwd();
+const CI_ROOT = process.env.CI_ROOT;
 const KEYTOOL_BIN = process.env.KEYTOOL_BIN || "keytool";
 
 function ensureDir(p) {

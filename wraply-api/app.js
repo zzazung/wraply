@@ -2,6 +2,7 @@ const express = require("express");
 const path = require("path");
 const cors = require("cors");
 
+const agentRoutes = require("./routes/agent");
 const authRoutes = require("./routes/auth");
 const projectRoutes = require("./routes/projects");
 const jobsRouter = require("./routes/jobs");
@@ -10,7 +11,7 @@ const installRoutes = require("./routes/install");
 const androidSigningRouter = require("./routes/signing.android");
 const internalRouter = require("./routes/internal");
 
-const CI_ROOT = process.env.CI_ROOT || "/ci";
+const CI_ROOT = process.env.CI_ROOT;
 
 const app = express();
 
@@ -60,6 +61,7 @@ app.use(
   )
 );
 
+app.use("/agent", agentRoutes);
 app.use("/auth", authRoutes);
 app.use("/projects", projectRoutes);
 app.use("/jobs", jobsRouter);

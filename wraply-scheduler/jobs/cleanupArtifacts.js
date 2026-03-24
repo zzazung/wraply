@@ -1,39 +1,43 @@
+const fs = require("fs");
+const path = require("path");
+
 const { query } = require("@wraply/shared/db");
-const artifactStorage = require("@wraply/shared/storage/artifactStorage");
+
+const ARTIFACT_ROOT =
+  process.env.ARTIFACT_DIR ||
+  path.join(process.cwd(), "artifacts");
 
 async function cleanupArtifacts() {
 
-  console.log("Cleanup artifacts");
-
   const rows = await query(`
-    SELECT id, file_path
+    SELECT id, tenant_id, path
     FROM artifacts
-    WHERE created_at < NOW() - INTERVAL 30 DAY
+    WHERE created_at < NOW() - INTERVAL 7 DAY
   `);
 
-  if (!rows.length) return;
+  for (const a of rows) {
 
-  for (const artifact of rows) {
+    const fullPath = path.join(process.cwd(), a.path);
 
     try {
 
-      await artifactStorage.deleteArtifact(artifact.file_path);
-
-      await query(`
-        DELETE FROM artifacts
-        WHERE id = ?
-      `, [artifact.id]);
-
-      console.log("Removed artifact", artifact.file_path);
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+      }
 
     } catch (err) {
 
-      console.error("Cleanup error", err);
+      console.error("[cleanup] file delete failed:", fullPath);
 
     }
+
+    await query(`
+      DELETE FROM artifacts
+      WHERE id=? AND tenant_id=?
+    `, [a.id, a.tenant_id]);
 
   }
 
 }
 
-module.exports = cleanupArtifacts;
+module.exports = { cleanupArtifacts };
