@@ -1,61 +1,45 @@
-// wraply-shared/lib/llm/index.js
-
 const OpenAI = require("openai");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-const gemini = new GoogleGenerativeAI(
-  process.env.GEMINI_API_KEY
-);
-
 /* --------------------------------
-   공통 안전 파서
+   안전 파서 (핵심)
 -------------------------------- */
 
 function safe(text){
 
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { raw: text };
+  if (!text) return "";
+
+  const trimmed = String(text).trim();
+
+  // JSON 형태일 때만 파싱
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed;
+    }
   }
+
+  return trimmed;
 
 }
 
 /* --------------------------------
-   OpenAI 호출
+   OpenAI 호출 (공통)
 -------------------------------- */
 
 async function callOpenAI({ model, input, maxTokens }){
 
   const res = await openai.responses.create({
     model,
-    input: JSON.stringify(input),
+    input: typeof input === "string" ? input : JSON.stringify(input),
     max_output_tokens: maxTokens
   });
 
   return safe(res.output?.[0]?.content?.[0]?.text);
-
-}
-
-/* --------------------------------
-   Gemini 호출
--------------------------------- */
-
-async function callGemini(input){
-
-  const model = gemini.getGenerativeModel({
-    model: "gemini-2.0-flash"
-  });
-
-  const res = await model.generateContent(
-    JSON.stringify(input)
-  );
-
-  return safe(res.response.text());
 
 }
 
@@ -68,36 +52,35 @@ async function generate({ type, input }){
   console.log("[LLM] type:", type);
 
   /* -----------------------------
-     1. planner (Gemini → OpenAI fallback)
+     1. planner (🔥 무조건 OpenAI)
   ----------------------------- */
 
   if (type === "planner"){
 
-    try {
-
-      console.log("[LLM] planner → Gemini");
-
-      return await callGemini(input);
-
-    } catch (err){
-
-      console.error("[LLM] Gemini failed:", err.message);
-
-      // 👉 fallback
-      console.log("[LLM] planner → OpenAI fallback");
-
-      return await callOpenAI({
-        model: "gpt-4.1-mini",
-        input,
-        maxTokens: 500
-      });
-
-    }
+    return await callOpenAI({
+      model: "gpt-4.1-mini",
+      input,
+      maxTokens: 500
+    });
 
   }
 
   /* -----------------------------
-     2. executor (OpenAI mini)
+     2. evaluator
+  ----------------------------- */
+
+  if (type === "evaluator"){
+
+    return await callOpenAI({
+      model: "gpt-4.1-mini",
+      input,
+      maxTokens: 50
+    });
+
+  }
+
+  /* -----------------------------
+     3. executor
   ----------------------------- */
 
   if (type === "executor"){
@@ -114,7 +97,7 @@ async function generate({ type, input }){
 
       console.error("[LLM] executor failed:", err.message);
 
-      // fallback nano
+      // fallback
       return await callOpenAI({
         model: "gpt-4.1-nano",
         input,
@@ -126,7 +109,7 @@ async function generate({ type, input }){
   }
 
   /* -----------------------------
-     3. fallback (nano)
+     fallback
   ----------------------------- */
 
   return await callOpenAI({
@@ -137,6 +120,15 @@ async function generate({ type, input }){
 
 }
 
+/* --------------------------------
+   표준 인터페이스
+-------------------------------- */
+
+async function callLLM(params){
+  return generate(params);
+}
+
 module.exports = {
+  callLLM,
   generate
 };

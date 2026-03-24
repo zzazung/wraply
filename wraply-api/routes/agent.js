@@ -3,36 +3,44 @@
 const express = require("express");
 const router = express.Router();
 
-const { createPlan } = require("../lib/agent/planner");
-const { runWorkflow } = require("../lib/agent/workflowRunner");
+const { runAgentLoop } = require("../services/agent/agentLoop");
+const { createPlan } = require("../services/agent/planner");
+const { executeWorkflow } = require("../services/agent/workflow");
 
-router.post("/run", async (req, res) => {
+router.post("/", async (req, res) => {
+  console.log("Authorization:", req.headers.authorization);
+  console.log("req.user:", req.user);
+
+  const { goal, context } = req.body;
 
   try {
 
-    const { goal } = req.body;
+    const finalContext = await runAgentLoop({
 
-    console.log("[agent] goal:", goal);
+      goal,
 
-    // 1. planner
-    const workflow = await createPlan(goal);
+      context,
 
-    console.log("[agent] workflow:", workflow);
+      planner: async ({ goal, context }) => {
+        return await createPlan({ goal, context });
+      },
 
-    // 2. 실행
-    const result = await runWorkflow({
-      jobId: `job_${Date.now()}`,
-      workflow
+      executeWorkflow
+
     });
 
-    return res.json(result);
+    res.json({
+      success: true,
+      context: finalContext
+    });
 
-  } catch (err){
+  } catch (err) {
 
-    console.error(err);
+    console.error("[agent] error:", err);
 
     res.status(500).json({
-      error: "agent failed"
+      success: false,
+      error: err.message
     });
 
   }

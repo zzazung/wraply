@@ -56,9 +56,11 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "ai": "^6.0.116",
+    "axios": "^1.13.6",
     "bcryptjs": "^3.0.3",
     "mysql2": "^3.18.2",
     "open": "^11.0.0",
-    "openai": "^6.32.0"
+    "openai": "^6.32.0",
+    "uuid": "^9.0.1"
   }
 }

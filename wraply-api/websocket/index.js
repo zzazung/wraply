@@ -8,7 +8,9 @@ const { query } = require("@wraply/shared/db")
 const {
   LOG_CHANNEL,
   STATUS_CHANNEL,
-  HEARTBEAT_CHANNEL
+  HEARTBEAT_CHANNEL,
+  AGENT_EVENT_CHANNEL,   // 🔥 추가
+  AGENT_LOG_CHANNEL      // 🔥 추가
 } = require("@wraply/shared/constants/queues")
 
 /**
@@ -84,6 +86,30 @@ function broadcastStatus(tenantId, jobId, status, progress) {
 }
 
 /* --------------------------------------------------
+   🔥 Agent broadcast (추가만)
+-------------------------------------------------- */
+
+function broadcastAgentEvent(tenantId, data) {
+
+  broadcastToTenant(tenantId, {
+    type: "agent_event",
+    ...data,
+    ts: Date.now()
+  })
+
+}
+
+function broadcastAgentLog(tenantId, data) {
+
+  broadcastToTenant(tenantId, {
+    type: "agent_log",
+    ...data,
+    ts: Date.now()
+  })
+
+}
+
+/* --------------------------------------------------
    heartbeat update
 -------------------------------------------------- */
 
@@ -122,7 +148,9 @@ function initRedisSubscriber() {
   redisSub.subscribe(
     LOG_CHANNEL,
     STATUS_CHANNEL,
-    HEARTBEAT_CHANNEL
+    HEARTBEAT_CHANNEL,
+    AGENT_EVENT_CHANNEL,   // 🔥 추가
+    AGENT_LOG_CHANNEL      // 🔥 추가
   )
 
   redisSub.on("message", async (channel, msg) => {
@@ -154,6 +182,18 @@ function initRedisSubscriber() {
         data.status,
         data.progress
       )
+    }
+
+    /* 🔥 Agent event 추가 */
+
+    if (channel === AGENT_EVENT_CHANNEL) {
+      broadcastAgentEvent(data.tenantId, data)
+      return
+    }
+
+    if (channel === AGENT_LOG_CHANNEL) {
+      broadcastAgentLog(data.tenantId, data)
+      return
     }
 
   })

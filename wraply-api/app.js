@@ -2,8 +2,10 @@ const express = require("express");
 const path = require("path");
 const cors = require("cors");
 
-const agentRoutes = require("./routes/agent");
+const { requireAuth } = require("./middleware/auth");
+
 const authRoutes = require("./routes/auth");
+const agentRoutes = require("./routes/agent");
 const projectRoutes = require("./routes/projects");
 const jobsRouter = require("./routes/jobs");
 const artifactRoutes = require("./routes/artifacts");
@@ -61,14 +63,14 @@ app.use(
   )
 );
 
-app.use("/agent", agentRoutes);
 app.use("/auth", authRoutes);
-app.use("/projects", projectRoutes);
-app.use("/jobs", jobsRouter);
-app.use("/artifacts", artifactRoutes);
-app.use("/install", installRoutes);
-app.use("/android/signing", androidSigningRouter);
-app.use("/internal", internalRouter);
+app.use("/agent", requireAuth, agentRoutes);
+app.use("/projects", requireAuth, projectRoutes);
+app.use("/jobs", requireAuth, jobsRouter);
+app.use("/artifacts", requireAuth, artifactRoutes);
+app.use("/install", requireAuth, installRoutes);
+app.use("/android/signing", requireAuth, androidSigningRouter);
+app.use("/internal", requireAuth, internalRouter);
 
 /**
  * 404 handler
