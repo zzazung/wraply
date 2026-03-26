@@ -1,72 +1,42 @@
-import { Link } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom";
 
-export default function Sidebar() {
+function Item({ to, label }:{ to:string; label:string }){
 
-  return (
+  const { pathname } = useLocation();
+  const active = pathname.startsWith(to);
 
-    <aside
-      className="
-      w-64
-      hidden
-      md:block
-      h-screen
-      p-4
-      border-r
-      bg-sidebar
-      text-sidebar-foreground
-      border-sidebar-border
-      "
+  return(
+    <Link
+      to={to}
+      className={`
+        block px-4 py-2 rounded-lg text-sm
+        ${active ? "bg-gray-100 font-medium" : "text-gray-600"}
+      `}
     >
+      {label}
+    </Link>
+  );
+}
 
-      <h1 className="text-lg font-semibold mb-6">
-        Wraply
-      </h1>
+export default function Sidebar(){
 
-      <nav className="space-y-1">
+  return(
 
-        <Link
-          to="/"
-          className="
-          block
-          p-2
-          rounded-md
-          hover:bg-sidebar-accent
-          hover:text-sidebar-accent-foreground
-          "
-        >
-          대시보드
-        </Link>
+    <div className="w-56 border-r h-full p-4 space-y-2">
 
-        <Link
-          to="/projects"
-          className="
-          block
-          p-2
-          rounded-md
-          hover:bg-sidebar-accent
-          hover:text-sidebar-accent-foreground
-          "
-        >
-          프로젝트
-        </Link>
+      <Item to="/dashboard" label="대시보드" />
 
-        <Link
-          to="/builds"
-          className="
-          block
-          p-2
-          rounded-md
-          hover:bg-sidebar-accent
-          hover:text-sidebar-accent-foreground
-          "
-        >
-          빌드 센터
-        </Link>
+      {/* 🔥 앱 빌드 (Wizard) */}
+      <Item to="/app-build" label="앱 빌드" />
 
-      </nav>
+      {/* 기존 */}
+      <Item to="/build" label="빌드 센터" />
+      <Item to="/build-history" label="빌드 이력" />
 
-    </aside>
+      <Item to="/agent" label="Agent Chat" />
 
-  )
+    </div>
+
+  );
 
 }

@@ -77,7 +77,8 @@ router.post("/", async (req, res) => {
       packageName,
       appName,
       url,
-      scheme
+      scheme,
+      settings
     } = req.body;
 
     if (
@@ -125,10 +126,11 @@ router.post("/", async (req, res) => {
         progress,
         worker_id,
         build_host,
+        settings,
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0, NULL, NULL, NOW(), NOW())
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0, NULL, NULL, ?, NOW(), NOW())
       `,
       [
         jobId,
@@ -139,7 +141,8 @@ router.post("/", async (req, res) => {
         safeName,
         appName || null,
         url || null,
-        scheme || null
+        scheme || null,
+        JSON.stringify(settings || {})
       ]
     );
 
@@ -151,7 +154,8 @@ router.post("/", async (req, res) => {
       packageName,
       safeName,
       appName,
-      url
+      url,
+      settings
     });
 
     res.json({ success: true, jobId });
@@ -241,7 +245,13 @@ router.get("/:jobId", async (req, res) => {
       return res.status(404).json({ error: "Job not found" });
     }
 
-    res.json(rows[0]);
+    const row = rows[0];
+
+    row.settings = typeof row.settings === "string"
+      ? JSON.parse(row.settings)
+      : row.settings;
+
+    res.json(row);
 
   } catch (err) {
 

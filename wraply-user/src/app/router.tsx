@@ -1,9 +1,12 @@
 import { Routes, Route } from "react-router-dom";
 
+import { EntryRoute } from "./routes/EntryRoute";
+
+import PublicLayout from "@/layouts/PublicLayout";
+import ProtectedLayout from "@/layouts/ProtectedLayout";
+
 import { publicRoutes } from "./routes/publicRoutes";
 import { protectedRoutes } from "./routes/protectedRoutes";
-
-import { EntryRoute } from "./routes/EntryRoute";
 
 export default function Router(){
 
@@ -14,11 +17,15 @@ export default function Router(){
       {/* 기본 진입 */}
       <Route path="/" element={<EntryRoute />} />
 
-      {/* public */}
-      {publicRoutes}
+      {/* 🔥 Public (sidebar 없음) */}
+      <Route element={<PublicLayout />}>
+        {publicRoutes}
+      </Route>
 
-      {/* protected */}
-      {protectedRoutes}
+      {/* 🔥 Protected (sidebar 있음) */}
+      <Route element={<ProtectedLayout />}>
+        {protectedRoutes}
+      </Route>
 
       {/* fallback */}
       <Route path="*" element={<EntryRoute />} />

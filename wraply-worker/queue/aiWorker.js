@@ -1,19 +1,15 @@
 // wraply-worker/queue/aiWorker.js
 
 const { Worker } = require("bullmq");
+const { v4: uuidv4 } = require("uuid");
 
 const redis = require("@wraply/shared/redis");
 const { runTask } = require("../tasks");
 
 const { publishAgentEvent } = require("../bus/logBus");
-
 const { AI_QUEUE } = require("@wraply/shared/constants/queues");
 
 const QUEUE_NAME = AI_QUEUE;
-
-/* --------------------------------------------------
-   Worker
--------------------------------------------------- */
 
 const aiWorker = new Worker(
 
@@ -21,12 +17,7 @@ const aiWorker = new Worker(
 
   async (job) => {
 
-    const {
-      jobId,
-      task,
-      payload,
-      tenantId
-    } = job.data;
+    const { jobId, task, payload, tenantId } = job.data;
 
     const meta = {
       attempt: job.attemptsMade,
@@ -36,16 +27,13 @@ const aiWorker = new Worker(
     /* 🔥 STEP_START */
 
     publishAgentEvent({
+      id: uuidv4(),
+      type:"agent_event",
       jobId,
       tenantId,
       event:"STEP_START",
-      step: task
-    });
-
-    console.log("[ai-worker] start", {
-      jobId,
-      task,
-      attempt: meta.attempt
+      step: task,
+      ts: Date.now()
     });
 
     try {
@@ -60,37 +48,31 @@ const aiWorker = new Worker(
       /* 🔥 STEP_DONE */
 
       publishAgentEvent({
+        id: uuidv4(),
+        type:"agent_event",
         jobId,
         tenantId,
         event:"STEP_DONE",
         step: task,
-        output: result
-      });
-
-      console.log("[ai-worker] success", {
-        jobId,
-        task,
-        result
+        output: result,
+        ts: Date.now()
       });
 
       return result;
 
     } catch (err) {
 
-      /* 🔥 STEP_FAIL */
+      /* 🔥 STEP_FAILED */
 
       publishAgentEvent({
+        id: uuidv4(),
+        type:"agent_event",
         jobId,
         tenantId,
-        event:"STEP_FAIL",
+        event:"STEP_FAILED",
         step: task,
-        error: err.message
-      });
-
-      console.error("[ai-worker] fail", {
-        jobId,
-        task,
-        error: err.message
+        error: err.message,
+        ts: Date.now()
       });
 
       throw err;
@@ -101,54 +83,10 @@ const aiWorker = new Worker(
 
   {
     connection: redis,
-    concurrency: 5,        // 🔥 중요 (튜닝 포인트)
-    lockDuration: 30000    // 🔥 job timeout 보호
+    concurrency: 5,
+    lockDuration: 30000
   }
 
 );
-
-/* --------------------------------------------------
-   Events
--------------------------------------------------- */
-
-aiWorker.on("completed", (job, result) => {
-
-  publishAgentEvent(job.data.jobId, {
-    jobId: job.data.jobId,
-    tenantId: job.data.tenantId,
-    event:"STEP_DONE",
-    step: job.data.task,
-    output: result
-  });
-
-  console.log("[ai-worker] completed", {
-    jobId: job.data.jobId,
-    task: job.data.task,
-    result
-  });
-
-});
-
-aiWorker.on("failed", (job, err) => {
-
-  publishAgentEvent({
-    jobId: job.data?.jobId,
-    tenantId: job.data?.tenantId,
-    event:"STEP_FAIL",
-    step: job.data?.task,
-    error: err.message
-  });
-
-  console.error("[ai-worker] failed", {
-    jobId: job.data?.jobId,
-    task: job.data?.task,
-    error: err?.message
-  });
-
-});
-
-/* --------------------------------------------------
-   Export (graceful shutdown용)
--------------------------------------------------- */
 
 module.exports = aiWorker;

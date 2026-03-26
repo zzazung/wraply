@@ -29,6 +29,8 @@ let heartbeatInterval = null
 
 function broadcastToTenant(tenantId, payload) {
 
+  console.log("🔥 WS BROADCAST:", tenantId, payload);
+
   const clients = tenantClients.get(tenantId)
   if (!clients) return
 
@@ -154,6 +156,9 @@ function initRedisSubscriber() {
   )
 
   redisSub.on("message", async (channel, msg) => {
+
+    console.log("🔥 REDIS RECEIVE:", msg);
+
     let data
 
     try {

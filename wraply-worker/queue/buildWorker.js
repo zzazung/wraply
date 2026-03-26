@@ -27,6 +27,8 @@ const {
   getCertPassPath
 } = require("../lib/iosSigning");
 
+const { applyAndroidPatches } = require("./patch/android");
+
 const WRAPLY_ROOT = process.env.WRAPLY_ROOT || path.resolve(process.cwd(), "..");
 
 const PROJECT_ROOT = path.join(WRAPLY_ROOT, "projects");
@@ -211,8 +213,14 @@ async function runBuild(job) {
       safeName,
       packageName,
       appName,
-      url
+      url,
+      settings
     } = job;
+
+    const safeSettings = settings || {};
+
+    publishLog(jobId, tenantId, "[settings]");
+    publishLog(jobId, tenantId, JSON.stringify(safeSettings, null, 2));
 
     let versionName = null;
     let versionCode = null;
@@ -336,9 +344,33 @@ async function runBuild(job) {
       heartbeatTimer = startHeartbeat(jobId);
       heartbeatDB = setInterval(() => updateHeartbeat(jobId, tenantId), 10000);
 
+      await transition(jobId, tenantId, STATES.PATCHING);
+
       let signingEnv = {};
 
       if (platform === "android") {
+
+        try {
+
+          await applyAndroidPatches(
+            path.join(workspace, "android"),
+            platform,
+            settings,
+            jobId,
+            tenantId
+          );
+
+        } catch(err) {
+
+          await transition(jobId, tenantId, STATES.FAILED);
+
+          publishLog(jobId, tenantId,
+            `[fatal] patch failed: ${err.message}`
+          );
+
+          return;
+
+        }
 
         signing =
           await ensureAndroidSigning(

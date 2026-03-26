@@ -9,11 +9,16 @@ const { TASK_SCHEMA } = require("@wraply/shared/lib/agent/taskSchema");
 const { pickContext } = require("./context");
 
 const {
-  saveAgentStep,
   createAgentRun,
   finishAgentRun,
+  saveAgentStep,
   saveAgentMemory
 } = require("@wraply/shared/db/agentMemory");
+
+const {
+  calculateScore,
+  shouldStore
+} = require("./memoryService");
 
 const {
   AI_QUEUE,
@@ -51,9 +56,25 @@ async function ensureQueueEventsReady() {
    Event Publisher
 -------------------------------------------------- */
 
+function validateEvent(event){
+
+  if (!event.jobId){
+    throw new Error("Invalid event: jobId required");
+  }
+
+  if (!event.type){
+    throw new Error("Invalid event: type required");
+  }
+
+}
+
 function publishEvent(event) {
 
+  console.log('[workflow]', event);
+
   try {
+
+    validateEvent(event);
 
     redis.publish(
       AGENT_EVENT_CHANNEL,
@@ -114,9 +135,7 @@ async function runStepWithRetry(fn, retries = 2) {
    Step 실행
 -------------------------------------------------- */
 
-async function runStep({ step, tenantId, context }) {
-
-  const jobId = uuidv4();
+async function runStep({ step, tenantId, context, jobId }) {
 
   console.log("[workflow] runStep:", {
     jobId,
@@ -254,11 +273,16 @@ function mergeContext(currentContext, step, result) {
 async function executeWorkflow({
   workflow,
   tenantId,
+  userId,
   context = {},
-  runId
+  jobId
 }) {
 
   await ensureQueueEventsReady();
+
+  if (!tenantId) {
+    throw new Error("tenantId required in workflow");
+  }
 
   if (!Array.isArray(workflow)) {
     throw new Error("Invalid workflow");
@@ -271,17 +295,22 @@ async function executeWorkflow({
     history: []
   };
 
-  /* 🔥 RUN 생성 (1번만) */
+  /* --------------------------------------------------
+     🔥 jobId 생성 (단 한 번)
+  -------------------------------------------------- */
 
-  if (runId) {
+  const finalJobId = jobId || uuidv4();
 
-    await createAgentRun({
-      runId,
-      tenantId,
-      goal: context?.goal || ""
-    });
+  /* --------------------------------------------------
+     🔥 RUN 생성 (DB)
+  -------------------------------------------------- */
 
-  }
+  await createAgentRun({
+    jobId: finalJobId,
+    tenantId,
+    userId,
+    goal: context?.goal || ""
+  });
 
   try {
 
@@ -296,12 +325,11 @@ async function executeWorkflow({
 
       const filteredContext = pickContext(step.task, currentContext);
 
-      /* STEP START */
-
       publishEvent({
-        type: "STEP_START",
+        type: "agent_event",
+        event: "STEP_START",
         tenantId,
-        runId,
+        jobId: finalJobId,
         step: step.task,
         context: filteredContext
       });
@@ -310,7 +338,8 @@ async function executeWorkflow({
         runStep({
           step,
           tenantId,
-          context: filteredContext
+          context: filteredContext,
+          jobId: finalJobId
         })
       );
 
@@ -319,19 +348,19 @@ async function executeWorkflow({
       if (!result.success) {
 
         publishEvent({
-          type: "STEP_FAILED",
+          type: "agent_event",
+          event: "STEP_FAILED",
           tenantId,
-          runId,
+          jobId: finalJobId,
           step: step.task,
           error: result.error
         });
 
-        if (runId) {
-          await finishAgentRun({
-            runId,
-            status: "failed"
-          });
-        }
+        await finishAgentRun({
+          jobId: finalJobId,
+          tenantId,
+          status: "failed"
+        });
 
         return {
           success: false,
@@ -342,7 +371,9 @@ async function executeWorkflow({
 
       }
 
-      /* 🔥 Context 먼저 업데이트 */
+      /* -------------------------
+         Context 업데이트
+      ------------------------- */
 
       currentContext = mergeContext(
         currentContext,
@@ -350,54 +381,70 @@ async function executeWorkflow({
         result
       );
 
-      /* 🔥 DB 저장 */
+      /* -------------------------
+         Step 저장
+      ------------------------- */
 
-      if (runId) {
+      await saveAgentStep({
+        jobId: finalJobId,
+        tenantId,
+        step: step.task,
+        input: filteredContext,
+        output: result.output ?? {}
+      });
 
-        await saveAgentStep({
-          runId,
-          tenantId,
-          step: step.task,
-          input: filteredContext,
-          output: result.output
+      /* -------------------------
+          🔥 Memory Ranking 적용
+      ------------------------- */
+
+      const keysToSave = [
+        "content",
+        "marketing",
+        "adsResult",
+        "slackResult"
+      ];
+
+      for (const key of keysToSave) {
+
+        const value = currentContext[key];
+
+        if (value === undefined) continue;
+
+        // 🔥 score 계산
+        const score = calculateScore({
+          output: value,
+          success: result.success
         });
 
-        const keysToSave = [
-          "content",
-          "marketing",
-          "adsResult",
-          "slackResult"
-        ];
+        console.log("[memory] score:", key, score);
 
-        for (const key of keysToSave) {
+        if (!shouldStore(score)) continue;
 
-          if (currentContext[key] !== undefined) {
+        // 🔥 저장
+        await saveAgentMemory({
+          jobId: finalJobId,
+          tenantId,
+          key,
+          value,
+          score,
+          success: result.success
+        });
 
-            await saveAgentMemory({
-              runId,
-              tenantId,
-              key,
-              value: currentContext[key]
-            });
-
-          }
-
-        }
+        console.log("[memory] saved:", key);
 
       }
 
       results.push({
         step: step.task,
-        jobId: job.jobId,
+        jobId: finalJobId,
         output: result.output
       });
 
-      /* STEP DONE */
-
       publishEvent({
-        type: "STEP_DONE",
+        type: "agent_event",
+        event: "STEP_DONE",
         tenantId,
-        runId,
+        jobId: finalJobId,
         step: step.task,
         output: result.output
       });
@@ -406,33 +453,32 @@ async function executeWorkflow({
 
     }
 
-    /* 🔥 RUN 종료 */
+    /* -------------------------
+       완료
+    ------------------------- */
 
-    if (runId) {
-
-      await finishAgentRun({
-        runId,
-        status: "done"
-      });
-
-    }
+    await finishAgentRun({
+      jobId: finalJobId,
+      tenantId,
+      status: "done"
+    });
 
     return {
       success: true,
       results,
-      context: currentContext
+      context: currentContext,
+      jobId: finalJobId
     };
 
   } catch (err) {
 
     console.error("[workflow] fatal error:", err);
 
-    if (runId) {
-      await finishAgentRun({
-        runId,
-        status: "failed"
-      });
-    }
+    await finishAgentRun({
+      jobId: finalJobId,
+      tenantId,
+      status: "failed"
+    });
 
     throw err;
 

@@ -9,7 +9,7 @@ export function useAgentSocket(){
   const {
     jobId,
     addStep,
-    addLog
+    appendStream
   } = useAgentStore();
 
   useEffect(()=>{
@@ -22,9 +22,9 @@ export function useAgentSocket(){
         addStep(data);
       }
 
-      if(data.type === "agent_log"){
-        addLog(data);
-      }
+			if(data.type === "agent_stream"){
+				appendStream(data);
+			}
 
     });
 

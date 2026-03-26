@@ -1,4 +1,4 @@
-const STATES = {
+export const STATES = {
   QUEUED: "queued",
   PREPARING: "preparing",
   PATCHING: "patching",
@@ -13,7 +13,7 @@ const STATES = {
 /**
  * terminal 상태
  */
-function isTerminal(status) {
+export function isTerminal(status) {
 
   return (
     status === STATES.FINISHED ||
@@ -69,7 +69,7 @@ const TRANSITIONS = {
 /**
  * 상태 전이 검증
  */
-function isValidTransition(
+export function isValidTransition(
   current,
   next
 ) {
@@ -91,7 +91,7 @@ function isValidTransition(
 /**
  * progress 계산
  */
-function getProgress(status) {
+export function getProgress(status) {
 
   switch (status) {
 
@@ -129,7 +129,7 @@ function getProgress(status) {
 /**
  * UI 상태 매핑
  */
-function getUIStatus(status) {
+export function getUIStatus(status) {
 
   switch (status) {
 
@@ -156,10 +156,9 @@ function getUIStatus(status) {
 
 }
 
-
-module.exports = {
-  STATES,
-  isTerminal,
-  isValidTransition,
-  getProgress
-}
+// module.exports = {
+//   STATES,
+//   isTerminal,
+//   isValidTransition,
+//   getProgress
+// }

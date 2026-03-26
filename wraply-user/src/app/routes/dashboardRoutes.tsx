@@ -1,6 +1,7 @@
 import { Navigate, Route } from "react-router-dom";
 
 import DashboardPage from "@/pages/dashboard/DashboardPage";
+import AgentChat from "@/pages/AgentChat";
 import AgentPlayground from "@/pages/AgentPlayground";
 
 export const dashboardRoutes = (
@@ -8,21 +9,14 @@ export const dashboardRoutes = (
   <>
 
     <Route
-      path="/"
-      element={<Navigate to="/dashboard" replace />}
-    />
-
-    <Route
       path="/dashboard"
       element={<DashboardPage />}
     />
 
-    {/* 🔥 Agent 추가 */}
-
-    <Route
-      path="/agent"
-      element={<AgentPlayground />}
-    />
+    <Route path="/agent">
+      <Route index element={<AgentPlayground />} />
+      <Route path="chat" element={<AgentChat />} />
+    </Route>
 
   </>
 

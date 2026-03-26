@@ -1,158 +1,114 @@
-import { useEffect,useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import PageHeader from "@/components/layout/PageHeader";
-import BuildHeader from "@/components/build/BuildHeader";
-import BuildProgress from "@/components/build/BuildProgress";
+import { Check, X } from "lucide-react";
+
+import InstallModal from "@/components/common/InstallModal";
 import BuildTimeline from "@/components/build/BuildTimeline";
-import BuildLogViewer from "@/components/build/BuildLogViewer";
-import BuildArtifacts from "@/components/build/BuildArtifacts";
 
-import { getJob } from "@/services/builds";
-import { fetchProject } from "@/services/projects";
-
-import type { BuildJob } from "@/types/build";
-import type { Project } from "@/types/project";
+import { getJob, fetchArtifacts } from "@/services/builds";
+import { useBuildStore } from "@/stores/buildStore";
 
 export default function BuildDetailPage(){
 
-  const { jobId } = useParams();
+  const { jobId } = useParams<{ jobId:string }>();
 
-  const [job,setJob] = useState<BuildJob | null>(null);
-  const [project,setProject] = useState<Project | null>(null);
+  const build = useBuildStore(s=> jobId ? s.builds[jobId] : undefined);
+  const setArtifacts = useBuildStore(s=>s.setArtifacts);
 
-  const [loading,setLoading] = useState(true);
-  const [error,setError] = useState<string | null>(null);
+  const artifacts = useBuildStore(s=> jobId ? s.artifacts[jobId] : []);
 
-  async function load(isPolling=false){
+  const [installId, setInstallId] = useState<string|null>(null);
+  const [showResult, setShowResult] = useState(false);
 
-    if(!jobId) return;
-
-    try{
-
-      if(!isPolling){
-
-        setLoading(true);
-
-      }
-
-      const jobData = await getJob(jobId);
-
-      setJob(jobData);
-
-      if(jobData?.project_id && !project){
-
-        const projectData = await fetchProject(jobData.project_id);
-
-        setProject(projectData);
-
-      }
-
-    }catch(e){
-
-      setError("빌드 정보를 불러오지 못했습니다.");
-
-    }finally{
-
-      if(!isPolling){
-
-        setLoading(false);
-
-      }
-
-    }
-
-  }
+  const status = build?.status?.toLowerCase();
+  const isFinished = status === "finished";
+  const isFailed = status === "failed";
 
   useEffect(()=>{
 
-    load(false);
+    if (!jobId) return;
 
-    const timer = setInterval(()=>{
-
-      load(true);
-
-    },5000);
-
-    return ()=>clearInterval(timer);
+    getJob(jobId).then(b=>{
+      useBuildStore.getState().updateBuild(b);
+    });
 
   },[jobId]);
 
-  if(loading){
+  useEffect(()=>{
 
-    return(
+    if (!isFinished) return;
 
-      <div className="text-muted-foreground">
+    fetchArtifacts(jobId!).then(items=>{
+      setArtifacts(jobId!, items);
+    });
 
-        빌드 정보를 불러오는 중입니다...
+  },[isFinished]);
 
-      </div>
+  useEffect(()=>{
 
-    );
+    if (!isFinished && !isFailed) return;
 
-  }
+    setShowResult(true);
 
-  if(error){
+  },[isFinished, isFailed]);
 
-    return(
+  useEffect(()=>{
 
-      <div className="text-destructive">
+    if (!isFinished) return;
+    if (!artifacts || artifacts.length === 0) return;
 
-        {error}
+    const t = setTimeout(()=>{
+      setInstallId(artifacts[0].id);
+    }, 800);
 
-      </div>
+    return ()=>clearTimeout(t);
 
-    );
-
-  }
-
-  if(!job){
-
-    return(
-
-      <div className="text-muted-foreground">
-
-        빌드 정보를 찾을 수 없습니다.
-
-      </div>
-
-    );
-
-  }
+  },[isFinished, artifacts]);
 
   return(
 
-    <div className="space-y-6">
+    <div className="p-6">
 
-      <PageHeader
-        title="빌드 상세"
-        breadcrumbs={[
-          { label:"프로젝트", href:"/projects" },
+      {/* 진행 중 */}
+      {!isFinished && !isFailed && (
+        <BuildTimeline build={build} />
+      )}
 
-          ...(project
-            ? [{ label:project.name, href:`/projects/${project.id}` }]
-            : []),
+      {/* 결과 */}
+      {(isFinished || isFailed) && showResult && (
 
-          { label:"빌드 상세" }
-        ]}
-      />
+        <div className="text-center space-y-8 py-20">
 
-      <BuildHeader
-        job={job}
-        project={project ?? undefined}
-      />
+          <div className={`
+            w-24 h-24 mx-auto rounded-full flex items-center justify-center
+            ${isFinished ? "bg-green-500" : "bg-red-500"}
+          `}>
+            {isFinished
+              ? <Check className="w-12 h-12 text-white stroke-[3]" />
+              : <X className="w-12 h-12 text-white stroke-[3]" />
+            }
+          </div>
 
-      <BuildProgress build={job} />
+          <h1 className="text-4xl font-bold">
+            {isFinished ? "앱 빌드 완료" : "빌드 실패"}
+          </h1>
 
-      <BuildTimeline build={job} />
+          <p className="text-gray-500">
+            {isFinished ? "설치를 진행합니다" : "로그를 확인해주세요"}
+          </p>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        </div>
 
-        <BuildLogViewer jobId={job.id} />
+      )}
 
-        <BuildArtifacts jobId={job.id} />
-
-      </div>
+      {/* 설치 */}
+      {installId && (
+        <InstallModal
+          artifactId={installId}
+          onClose={()=>setInstallId(null)}
+        />
+      )}
 
     </div>
 

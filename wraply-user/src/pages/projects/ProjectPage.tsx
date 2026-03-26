@@ -1,156 +1,203 @@
-import { useEffect,useState } from "react";
-
-import PageHeader from "@/components/layout/PageHeader";
-import ProjectCard from "@/components/projects/ProjectCard";
-import ProjectCreateModal from "@/components/projects/ProjectCreateModal";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { fetchProjects } from "@/services/projects";
+import { useProjectStore } from "@/stores/projectStore";
+import { useAuthStore } from "@/stores/authStore";
 
-import type { Project } from "@/types/project";
+import { Plus, Smartphone } from "lucide-react";
 
 export default function ProjectPage(){
 
-  const [projects,setProjects] = useState<Project[]>([]);
+  const navigate = useNavigate();
 
-  const [loading,setLoading] = useState(true);
+  const [projects, setProjects] = useState<any[]>([]);
 
-  const [open,setOpen] = useState(false);
+  const setCurrentProject = useProjectStore(s=>s.setCurrentProject);
+  const clearCurrentProject = useProjectStore(s=>s.clearCurrentProject);
+  const recent = useProjectStore(s=>s.recentProject);
 
-  async function load(){
-
-    try{
-
-      setLoading(true);
-
-      const data = await fetchProjects();
-
-      setProjects(data);
-
-    }finally{
-
-      setLoading(false);
-
-    }
-
-  }
+  const user = useAuthStore(s=>s.user);
 
   useEffect(()=>{
-
-    load();
-
+    clearCurrentProject();   // 🔥 뒤로가기 시 reset
+    fetchProjects().then(setProjects);
   },[]);
+
+  function handleSelect(p:any){
+    setCurrentProject(p);
+    navigate("/dashboard");
+  }
 
   return(
 
-    <div className="space-y-6">
+    <div>
 
-      <div className="flex items-center justify-between">
+      <div className="px-8 pt-10 pb-16">
 
-        <div>
+        <div className="w-full max-w-screen-2xl mx-auto space-y-10">
 
-          {/* <h1 className="text-2xl font-semibold">
+          {/* 🔥 HERO */}
+          <div className="
+            bg-blue-500
+            text-white
+            rounded-2xl
+            p-8
+          ">
 
-            프로젝트 관리
+            <div className="text-xl font-semibold">
+              고객님 안녕하세요.
+            </div>
 
-          </h1> */}
+            <div className="text-sm opacity-90 mt-1">
+              {user?.name} | {user?.email}
+            </div>
 
-          <PageHeader
-            title="프로젝트"
-            breadcrumbs={[
-              { label:"프로젝트" }
-            ]}
-          />
+            {/* 🔥 최근 프로젝트 */}
+            {recent && (
+              <div className="mt-6 bg-white/20 rounded-xl p-4">
 
-          <div className="text-sm text-muted-foreground mt-1">
+                <div className="text-sm opacity-80 mb-2">
+                  최근 프로젝트
+                </div>
 
-            모바일 웹을 네이티브 앱으로 빌드합니다.
+                <button
+                  onClick={()=>{
+                    setCurrentProject(recent);
+                    navigate("/dashboard");
+                  }}
+                  className="
+                    bg-white
+                    text-blue-500
+                    px-4 py-2
+                    rounded-md
+                    text-sm
+                    hover:bg-gray-100
+                  "
+                >
+                  {recent.name} 바로가기
+                </button>
+
+              </div>
+            )}
+
+          </div>
+
+          {/* 🔥 GRID */}
+          <div className="
+            grid
+            grid-cols-1
+            sm:grid-cols-2
+            lg:grid-cols-3
+            xl:grid-cols-4
+            gap-8
+          ">
+
+            {/* 앱 등록 */}
+            <div
+              onClick={()=>navigate("/projects/new")}
+              className="
+                border-2 border-dashed border-gray-300
+                rounded-2xl
+                h-56
+                p-6
+                flex flex-col items-center justify-center
+                text-center
+                cursor-pointer
+                bg-white
+                hover:bg-gray-50
+                hover:shadow-md
+                transition-all
+              "
+            >
+
+              <div className="
+                w-12 h-12
+                rounded-xl
+                bg-blue-50
+                flex items-center justify-center
+                mb-3
+              ">
+                <Plus className="w-6 h-6 text-blue-500" />
+              </div>
+
+              <div className="text-lg font-semibold mb-1">
+                앱 등록
+              </div>
+
+              <div className="text-sm text-gray-500 mb-4 px-4">
+                앱을 등록하고 서비스를 사용해보세요
+              </div>
+
+              <button className="
+                bg-blue-500
+                text-white
+                px-4 py-2
+                rounded-md
+                text-sm
+                hover:bg-blue-600
+              ">
+                앱 등록하기
+              </button>
+
+            </div>
+
+            {/* 프로젝트 */}
+            {projects.map(p=>(
+              <div
+                key={p.id}
+                onClick={()=>handleSelect(p)}   // 🔥 카드 전체 클릭
+                className="
+                  border border-gray-200
+                  rounded-2xl
+                  p-6
+                  h-56
+                  flex flex-col justify-between gap-4
+                  bg-white
+                  cursor-pointer
+                  hover:shadow-xl
+                  hover:-translate-y-1
+                  hover:scale-[1.02]
+                  hover:border-blue-500
+                  transition-all
+                "
+              >
+
+                <div className="flex items-center gap-3">
+
+                  <div className="
+                    w-11 h-11
+                    rounded-xl
+                    bg-gray-100
+                    flex items-center justify-center
+                  ">
+                    <Smartphone className="w-5 h-5 text-gray-600" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate">
+                      {p.name}
+                    </div>
+
+                    <div className="text-xs text-gray-400 truncate">
+                      {p.bundleId}
+                    </div>
+                  </div>
+
+                </div>
+
+                <div className="text-sm text-blue-500 font-medium">
+                  선택 →
+                </div>
+
+              </div>
+            ))}
 
           </div>
 
         </div>
 
-        <button
-          onClick={()=>setOpen(true)}
-          className="
-          bg-primary
-          text-primary-foreground
-          px-4
-          py-2
-          rounded-md
-          hover:opacity-90
-          transition
-          "
-        >
-
-          프로젝트 생성
-
-        </button>
-
       </div>
-
-      {loading && (
-
-        <div className="text-muted-foreground">
-
-          프로젝트를 불러오는 중입니다...
-
-        </div>
-
-      )}
-
-      {!loading && projects.length === 0 && (
-
-        <div className="bg-card border border-border rounded-lg p-10 text-center space-y-3">
-
-          <div className="text-sm text-muted-foreground">
-
-            아직 생성된 프로젝트가 없습니다.
-
-          </div>
-
-          <button
-            onClick={()=>setOpen(true)}
-            className="
-            bg-primary
-            text-primary-foreground
-            px-4
-            py-2
-            rounded-md
-            hover:opacity-90
-            transition
-            "
-          >
-
-            첫 프로젝트 만들기
-
-          </button>
-
-        </div>
-
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-
-        {projects.map(project=>(
-
-          <ProjectCard
-            key={project.id}
-            project={project}
-            onDeleted={load}
-          />
-
-        ))}
-
-      </div>
-
-      {open && (
-
-        <ProjectCreateModal
-          onClose={()=>setOpen(false)}
-          onCreated={load}
-        />
-
-      )}
 
     </div>
 

@@ -1,3 +1,6 @@
+const { v4: uuidv4 } = require("uuid");
+
+const { getBestMemory } = require("@wraply/shared/db/agentMemory");
 const { evaluateGoal } = require("./evaluator");
 
 async function runAgentLoop({
@@ -6,8 +9,17 @@ async function runAgentLoop({
   executeWorkflow,
   context = {},
   tenantId,
+  userId,
   maxIterations = 5
 }) {
+
+  if (!tenantId) {
+    throw new Error("tenantId required");
+  }
+
+  /* 🔥 핵심: jobId 한 번만 생성 */
+
+  const jobId = uuidv4();
 
   let iteration = 0;
 
@@ -21,9 +33,15 @@ async function runAgentLoop({
 
     /* ---------------- PLAN ---------------- */
 
+    const memory = await getBestMemory({
+      tenantId,
+      key: "marketing"
+    });
+
     const steps = await planner({
       goal,
-      context: currentContext
+      context: currentContext,
+      memory
     });
 
     console.log("[agent] plan:", steps);
@@ -37,8 +55,9 @@ async function runAgentLoop({
     const result = await executeWorkflow({
       workflow: steps,
       tenantId,
+      userId,
       context: currentContext,
-      runId: `run_${Date.now()}`
+      jobId   // 🔥 runId → jobId
     });
 
     if (!result.success) {
@@ -56,18 +75,14 @@ async function runAgentLoop({
     });
 
     if (decision === "DONE") {
-
       console.log("[agent] goal achieved");
       break;
-
     }
 
     if (decision === "REPLAN") {
-
       console.log("[agent] replanning...");
       iteration++;
       continue;
-
     }
 
     if (currentContext.lastResult && iteration > 0) {
@@ -75,11 +90,13 @@ async function runAgentLoop({
       break;
     }
 
-    // CONTINUE
     iteration++;
   }
 
-  return currentContext;
+  return {
+    jobId,          // 🔥 프론트로 전달 가능
+    context: currentContext
+  };
 
 }
 

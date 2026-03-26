@@ -3,6 +3,7 @@ const path = require("path");
 const cors = require("cors");
 
 const { requireAuth } = require("./middleware/auth");
+const requireTenant = require("./middleware/requireTenant");
 
 const authRoutes = require("./routes/auth");
 const agentRoutes = require("./routes/agent");
@@ -64,13 +65,17 @@ app.use(
 );
 
 app.use("/auth", authRoutes);
-app.use("/agent", requireAuth, agentRoutes);
-app.use("/projects", requireAuth, projectRoutes);
-app.use("/jobs", requireAuth, jobsRouter);
-app.use("/artifacts", requireAuth, artifactRoutes);
-app.use("/install", requireAuth, installRoutes);
-app.use("/android/signing", requireAuth, androidSigningRouter);
-app.use("/internal", requireAuth, internalRouter);
+app.use("/internal", internalRouter);
+
+app.use(requireAuth);
+app.use(requireTenant);
+
+app.use("/agent", agentRoutes);
+app.use("/projects", projectRoutes);
+app.use("/jobs", jobsRouter);
+app.use("/artifacts", artifactRoutes);
+app.use("/install", installRoutes);
+app.use("/android/signing", androidSigningRouter);
 
 /**
  * 404 handler
