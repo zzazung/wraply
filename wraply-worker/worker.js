@@ -12,8 +12,9 @@ const { startCancelListener } = require("./bus/cancelBus");
    Worker Instances
 -------------------------------------------------- */
 
-let buildWorker = null;
-let aiWorker = null;
+// let buildWorker = null;
+// let aiWorker = null;
+let targetWorker = null;
 
 /* --------------------------------------------------
    Start
@@ -25,15 +26,20 @@ async function start() {
 
     console.log("[wraply-worker] starting worker");
 
-    /* ---------------- build worker ---------------- */
+    // /* ---------------- build worker ---------------- */
 
-    buildWorker = require("./queue/buildConsumer");
-    console.log("[wraply-worker] build consumer started");
+    // buildWorker = require("./queue/buildConsumer");
+    // console.log("[wraply-worker] build consumer started");
 
-    /* ---------------- AI worker ---------------- */
+    // /* ---------------- AI worker ---------------- */
 
-    aiWorker = require("./queue/aiWorker");
-    console.log("[wraply-worker] ai worker started");
+    // aiWorker = require("./queue/aiWorker");
+    // console.log("[wraply-worker] ai worker started");
+
+    /* ---------------- target worker ---------------- */
+
+    targetWorker = require("./queue/targetWorker");
+    console.log("[wraply-worker] target worker started");
 
     /* ---------------- cancel listener ---------------- */
 
@@ -61,14 +67,19 @@ async function shutdown(code = 0) {
 
     console.log("[wraply-worker] shutting down...");
 
-    if (buildWorker) {
-      await buildWorker.close();
-      console.log("[wraply-worker] build worker closed");
-    }
+    // if (buildWorker) {
+    //   await buildWorker.close();
+    //   console.log("[wraply-worker] build worker closed");
+    // }
 
-    if (aiWorker) {
-      await aiWorker.close();
-      console.log("[wraply-worker] ai worker closed");
+    // if (aiWorker) {
+    //   await aiWorker.close();
+    //   console.log("[wraply-worker] ai worker closed");
+    // }
+
+    if (targetWorker) {
+      await targetWorker.close();
+      console.log("[wraply-worker] target worker closed");
     }
 
     console.log("[wraply-worker] shutdown complete");

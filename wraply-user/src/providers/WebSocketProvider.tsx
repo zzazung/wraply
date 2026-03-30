@@ -1,4 +1,7 @@
+// src/providers/WebSocketProvider.tsx
+
 import { createContext, useEffect, useRef, useState } from "react";
+import { useWorkflowStore } from "@/stores/workflowStore";
 import { useBuildStore } from "@/stores/buildStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useAgentStore } from "../stores/agent";
@@ -13,6 +16,11 @@ export function WebSocketProvider({ children }:{ children:React.ReactNode }){
   const retryRef = useRef(0);
 
   const [wsState, setWsState] = useState<WebSocket | null>(null);
+
+  const setWorkflowStatus = useWorkflowStore(s=>s.setStatus);
+  const updateStep = useWorkflowStore(s=>s.updateStep);
+  const addWorkflowLog = useWorkflowStore(s=>s.addLog);
+  const currentWorkflowId = useWorkflowStore(s=>s.workflowId);
 
   const updateBuild = useBuildStore((s)=>s.updateBuild);
   const appendLog = useBuildStore((s)=>s.appendLog);
@@ -79,6 +87,32 @@ export function WebSocketProvider({ children }:{ children:React.ReactNode }){
 
           console.log("🔥 WS RECEIVE:", data);
 
+          /* ---------------- workflow ---------------- */
+
+          if (data.type === "workflow"){
+
+            // 🔥 현재 workflow만 처리
+            if (data.workflowId !== currentWorkflowId) return;
+
+            if (data.event === "STATUS"){
+              setWorkflowStatus(data.status);
+            }
+
+            if (data.event === "STEP"){
+              updateStep(data.step, data.status);
+            }
+
+            if (data.event === "LOG"){
+              addWorkflowLog({
+                message: data.message,
+                ts: Date.now()
+              });
+            }
+
+          }
+
+          /* ---------------- build ---------------- */
+
           if (data.type === "status"){
 
             updateBuild({
@@ -97,7 +131,7 @@ export function WebSocketProvider({ children }:{ children:React.ReactNode }){
 
           }
 
-          /* 🔥🔥🔥 여기 추가 */
+          /* ---------------- agent ---------------- */
 
           if (data.type === "agent_event"){
 

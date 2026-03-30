@@ -1,3 +1,5 @@
+// src/pages/ProjectPage.tsx
+
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -5,13 +7,17 @@ import { fetchProjects } from "@/services/projects";
 import { useProjectStore } from "@/stores/projectStore";
 import { useAuthStore } from "@/stores/authStore";
 
-import { Plus, Smartphone } from "lucide-react";
+import { Plus, Globe } from "lucide-react";
+
+import ProjectCreateModal from "@/components/projects/ProjectCreateModal";
 
 export default function ProjectPage(){
 
   const navigate = useNavigate();
 
   const [projects, setProjects] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
 
   const setCurrentProject = useProjectStore(s=>s.setCurrentProject);
   const clearCurrentProject = useProjectStore(s=>s.clearCurrentProject);
@@ -19,14 +25,55 @@ export default function ProjectPage(){
 
   const user = useAuthStore(s=>s.user);
 
+  /* ---------------- init ---------------- */
+
   useEffect(()=>{
-    clearCurrentProject();   // 🔥 뒤로가기 시 reset
-    fetchProjects().then(setProjects);
+
+    // 🔥 recent 없을 때만 초기화 (UX 개선)
+    if (!recent){
+      clearCurrentProject();
+    }
+
+    fetchProjects()
+      .then(data=>{
+        setProjects(data || []);
+      })
+      .catch(err=>{
+        console.error("projects load fail:", err);
+        setProjects([]);
+      })
+      .finally(()=>{
+        setLoading(false);
+      });
+
   },[]);
 
+  /* ---------------- select ---------------- */
+
   function handleSelect(p:any){
+
     setCurrentProject(p);
-    navigate("/dashboard");
+
+    // 🔥 race condition 방지
+    setTimeout(()=>{
+      navigate("/dashboard");
+    },0);
+
+  }
+
+  /* ---------------- recent safe ---------------- */
+
+  const recentProject =
+    projects.find(p=>p.id === recent?.id);
+
+  /* ---------------- render ---------------- */
+
+  if (loading){
+    return (
+      <div className="p-10 text-center text-gray-500">
+        프로젝트 불러오는 중...
+      </div>
+    );
   }
 
   return(
@@ -53,8 +100,8 @@ export default function ProjectPage(){
               {user?.name} | {user?.email}
             </div>
 
-            {/* 🔥 최근 프로젝트 */}
-            {recent && (
+            {/* 🔥 최근 프로젝트 (safe) */}
+            {recentProject && (
               <div className="mt-6 bg-white/20 rounded-xl p-4">
 
                 <div className="text-sm opacity-80 mb-2">
@@ -63,7 +110,7 @@ export default function ProjectPage(){
 
                 <button
                   onClick={()=>{
-                    setCurrentProject(recent);
+                    setCurrentProject(recentProject);
                     navigate("/dashboard");
                   }}
                   className="
@@ -75,7 +122,7 @@ export default function ProjectPage(){
                     hover:bg-gray-100
                   "
                 >
-                  {recent.name} 바로가기
+                  {recentProject.name} 바로가기
                 </button>
 
               </div>
@@ -93,9 +140,9 @@ export default function ProjectPage(){
             gap-8
           ">
 
-            {/* 앱 등록 */}
+            {/* 프로젝트 생성 */}
             <div
-              onClick={()=>navigate("/projects/new")}
+              onClick={()=>setOpen(true)}
               className="
                 border-2 border-dashed border-gray-300
                 rounded-2xl
@@ -122,11 +169,11 @@ export default function ProjectPage(){
               </div>
 
               <div className="text-lg font-semibold mb-1">
-                앱 등록
+                프로젝트 생성
               </div>
 
               <div className="text-sm text-gray-500 mb-4 px-4">
-                앱을 등록하고 서비스를 사용해보세요
+                서비스를 등록하고 다양한 타겟으로 확장하세요
               </div>
 
               <button className="
@@ -137,67 +184,90 @@ export default function ProjectPage(){
                 text-sm
                 hover:bg-blue-600
               ">
-                앱 등록하기
+                시작하기
               </button>
 
             </div>
 
-            {/* 프로젝트 */}
-            {projects.map(p=>(
-              <div
-                key={p.id}
-                onClick={()=>handleSelect(p)}   // 🔥 카드 전체 클릭
-                className="
-                  border border-gray-200
-                  rounded-2xl
-                  p-6
-                  h-56
-                  flex flex-col justify-between gap-4
-                  bg-white
-                  cursor-pointer
-                  hover:shadow-xl
-                  hover:-translate-y-1
-                  hover:scale-[1.02]
-                  hover:border-blue-500
-                  transition-all
-                "
-              >
+            {/* 프로젝트 리스트 */}
+            {projects.map(p=>{
 
-                <div className="flex items-center gap-3">
+              const settings =
+                typeof p.settings === "string"
+                  ? JSON.parse(p.settings)
+                  : p.settings;
 
-                  <div className="
-                    w-11 h-11
-                    rounded-xl
-                    bg-gray-100
-                    flex items-center justify-center
-                  ">
-                    <Smartphone className="w-5 h-5 text-gray-600" />
+              const url =
+                p.url || settings?.url || "서비스 URL 없음";
+
+              return(
+
+                <div
+                  key={p.id}
+                  onClick={()=>handleSelect(p)}
+                  className="
+                    border border-gray-200
+                    rounded-2xl
+                    p-6
+                    h-56
+                    flex flex-col justify-between gap-4
+                    bg-white
+                    cursor-pointer
+                    hover:shadow-xl
+                    hover:-translate-y-1
+                    hover:scale-[1.02]
+                    hover:border-blue-500
+                    transition-all
+                  "
+                >
+
+                  <div className="flex items-center gap-3">
+
+                    <div className="
+                      w-11 h-11
+                      rounded-xl
+                      bg-gray-100
+                      flex items-center justify-center
+                    ">
+                      <Globe className="w-5 h-5 text-gray-600" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="font-semibold truncate">
+                        {p.name}
+                      </div>
+
+                      <div className="text-xs text-gray-400 truncate">
+                        {url}
+                      </div>
+                    </div>
+
                   </div>
 
-                  <div className="min-w-0">
-                    <div className="font-semibold truncate">
-                      {p.name}
-                    </div>
-
-                    <div className="text-xs text-gray-400 truncate">
-                      {p.bundleId}
-                    </div>
+                  <div className="text-sm text-blue-500 font-medium">
+                    열기 →
                   </div>
 
                 </div>
 
-                <div className="text-sm text-blue-500 font-medium">
-                  선택 →
-                </div>
+              );
 
-              </div>
-            ))}
+            })}
 
           </div>
 
         </div>
 
       </div>
+
+      {open && (
+        <ProjectCreateModal
+          onClose={()=>setOpen(false)}
+          onCreated={()=>{
+            fetchProjects().then(setProjects); // 🔥 목록 갱신
+          }}
+        />
+      )}
 
     </div>
 

@@ -3,8 +3,7 @@
 const express = require("express");
 const { v4: uuidv4 } = require("uuid");
 
-const { query } = require("@wraply/shared/db");
-const { requireAuth } = require("../middleware/auth");
+const { query, withTransaction } = require("@wraply/shared/db");
 const { enqueueBuild } = require("../queue/buildQueue");
 
 const router = express.Router();
@@ -12,7 +11,7 @@ const router = express.Router();
 /**
  * Project List
  */
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", async (req, res) => {
 
   try {
 
@@ -25,8 +24,7 @@ router.get("/", requireAuth, async (req, res) => {
         tenant_id,
         name,
         safe_name,
-        package_name,
-        bundle_id,
+        settings,
         created_at,
         updated_at
       FROM projects
@@ -36,7 +34,14 @@ router.get("/", requireAuth, async (req, res) => {
       [tenantId]
     );
 
-    res.json({ items: rows });
+    const items = rows.map(r => ({
+      ...r,
+      settings: r.settings
+        ? JSON.parse(r.settings)
+        : {}
+    }));
+
+    res.json({ items });
 
   } catch (err) {
 
@@ -50,50 +55,99 @@ router.get("/", requireAuth, async (req, res) => {
 /**
  * Project Create
  */
-router.post("/", requireAuth, async (req, res) => {
+router.post("/", async (req, res) => {
 
   try {
 
     const { tenantId } = req.user;
+    const { name, url } = req.body;
 
-    const {
-      name,
-      packageName,
-      bundleId
-    } = req.body;
-
-    if (!name || !packageName) {
+    if (!name) {
       return res.status(400).json({ error: "Invalid fields" });
     }
 
     const id = uuidv4();
-    const safeName = packageName.replace(/\./g, "_");
+    const safeName = `p_${id.replace(/-/g, "")}`;
 
-    await query(
-      `
-      INSERT INTO projects (
-        id,
-        tenant_id,
-        name,
-        safe_name,
-        package_name,
-        bundle_id,
-        created_at,
-        updated_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
-      `,
-      [
-        id,
-        tenantId,
-        name,
-        safeName,
-        packageName,
-        bundleId || null
-      ]
-    );
+    const settings = JSON.stringify({
+      appName: name,
+      url: url || ""
+    });
 
-    res.json({ id });
+    await withTransaction(async (conn) => {
+
+      /* ---------------- project ---------------- */
+
+      await conn.query(
+        `
+        INSERT INTO projects (
+          id,
+          tenant_id,
+          name,
+          safe_name,
+          settings,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+        `,
+        [
+          id,
+          tenantId,
+          name,
+          safeName,
+          settings
+        ]
+      );
+
+      /* ---------------- default targets ---------------- */
+
+      await conn.query(
+        `
+        INSERT INTO project_targets (
+          id,
+          tenant_id,
+          project_id,
+          type,
+          config,
+          created_at,
+          updated_at
+        )
+        VALUES
+          (?, ?, ?, 'android_build', ?, NOW(), NOW()),
+          (?, ?, ?, 'ios_build', ?, NOW(), NOW())
+        `,
+        [
+          uuidv4(),
+          tenantId,
+          id,
+          JSON.stringify({
+            versionCode: 1,
+            versionName: "1.0.0",
+            adaptiveIcon: true
+          }),
+
+          uuidv4(),
+          tenantId,
+          id,
+          JSON.stringify({
+            displayName: name,
+            versionName: "1.0.0",
+            buildNumber: "1"
+          })
+        ]
+      );
+
+    });
+
+    res.json({
+      id,
+      name,
+      safe_name: safeName,
+      settings: JSON.parse(settings),
+      created_at: new Date(),
+      updated_at: new Date()
+    });
 
   } catch (err) {
 
@@ -107,7 +161,7 @@ router.post("/", requireAuth, async (req, res) => {
 /**
  * Project Detail
  */
-router.get("/:projectId", requireAuth, async (req, res) => {
+router.get("/:projectId", async (req, res) => {
 
   try {
 
@@ -128,7 +182,13 @@ router.get("/:projectId", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "Project not found" });
     }
 
-    res.json(rows[0]);
+    const row = rows[0];
+
+    row.settings = row.settings
+      ? JSON.parse(row.settings)
+      : {};
+
+    res.json(row);
 
   } catch (err) {
 
@@ -142,7 +202,7 @@ router.get("/:projectId", requireAuth, async (req, res) => {
 /**
  * Project Builds (History)
  */
-router.get("/:projectId/builds", requireAuth, async (req, res) => {
+router.get("/:projectId/builds", async (req, res) => {
 
   try {
 
@@ -198,7 +258,7 @@ router.get("/:projectId/builds", requireAuth, async (req, res) => {
 /**
  * ❗ LEGACY (삭제 예정)
  */
-router.post("/:projectId/builds", requireAuth, async (req, res) => {
+router.post("/:projectId/builds", async (req, res) => {
 
   try {
 

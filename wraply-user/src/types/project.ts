@@ -6,26 +6,18 @@ export interface Project {
 
   id:string;
 
+  tenantId:string;
+
   name:string;
-
-  appName:string;
-
-  url:string;
-
-  packageName:string;
 
   safeName:string;
 
-  scheme:string | null;
+  url?:string;
 
   createdAt:string;
 
   updatedAt:string;
 
-  /* UI용 필드 */
-
-  buildCount?:number;
-
-  lastBuildAt?:number;
+  settings:JSON;
 
 }

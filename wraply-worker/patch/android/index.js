@@ -18,7 +18,17 @@ const patches = [
   applySplashImageAndroid
 ];
 
-async function applyAndroidPatches(projectDir, settings, jobId, tenantId){
+async function applyAndroidPatches(projectDir, platform, settings, jobId, tenantId){
+
+  const config = settings?.target?.config || {};
+
+  const {
+    versionCode = 1,
+    versionName = "1.0.0",
+    adaptiveIcon = false
+  } = config;
+
+  console.log("[patch][android]", config);
 
   for (const patch of patches){
 

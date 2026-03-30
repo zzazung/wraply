@@ -1,106 +1,140 @@
 // src/pages/app-build/steps/StepUI.tsx
 
 import { useAppBuildStore } from "@/stores/appBuildStore";
+import SplashModal from "../../../components/build/SplashModal";
+import { useObjectUrl } from "@/hooks/useObjectUrl";
+import { useState } from "react";
 
 export default function StepUI(){
 
-  const {
-    splash,
-    set,
-    next,
-    prev
-  } = useAppBuildStore();
+  const { splashConfig, startEditing } = useAppBuildStore();
+
+  const [open, setOpen] = useState(false);
+
+  const bgPreview = useObjectUrl(splashConfig.backgroundFile);
+  const logoPreview = useObjectUrl(splashConfig.logoFile);
 
   return(
 
-    <div className="max-w-xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-10">
 
-      <h1 className="text-xl font-semibold text-center">
-        UX / UI 설정
-      </h1>
+      {/* 타이틀 */}
+      <div className="text-center space-y-2">
 
-      {/* Splash Screen */}
-      <div className="space-y-3">
+        <h1 className="text-2xl font-semibold">
+          UX/UI 설정
+        </h1>
 
-        <label className="text-sm font-medium">
-          Splash Screen
-        </label>
+        <p className="text-sm text-gray-500">
+          앱의 주요 화면 요소를 설정하고 브랜딩을 완성해 보세요
+        </p>
 
-        <div className="flex items-center gap-3">
+      </div>
 
-          <button
-            onClick={()=>set("splash", true)}
-            className={`
-              px-4 py-2 rounded border
-              ${splash ? "bg-blue-500 text-white" : ""}
-            `}
-          >
-            사용
-          </button>
+      {/* ---------------- 스플래시 ---------------- */}
+      <div className="space-y-4">
 
-          <button
-            onClick={()=>set("splash", false)}
-            className={`
-              px-4 py-2 rounded border
-              ${!splash ? "bg-blue-500 text-white" : ""}
-            `}
-          >
-            사용 안함
-          </button>
+        <div className="flex justify-between items-center">
+
+          <h2 className="text-sm font-medium">
+            스플래시
+          </h2>
+
+          <span className="text-sm text-gray-400">
+            디바이스를 클릭하여 스플래시 화면을 설정하세요
+          </span>
 
         </div>
 
-      </div>
-
-      {/* 아이콘 업로드 (Mock) */}
-      <div className="space-y-2">
-
-        <label className="text-sm font-medium">
-          앱 아이콘
-        </label>
-
-        <div className="
-          w-24 h-24 border rounded-lg
-          flex items-center justify-center
-          text-xs text-gray-400
-          cursor-pointer
-          hover:bg-gray-50
-        ">
-          업로드
-        </div>
-
-      </div>
-
-      {/* 테마 색상 */}
-      <div className="space-y-2">
-
-        <label className="text-sm font-medium">
-          Primary Color
-        </label>
-
-        <input
-          type="color"
-          onChange={e=>set("primaryColor", e.target.value)}
-          className="w-16 h-10 border rounded"
-        />
-
-      </div>
-
-      {/* 버튼 */}
-      <div className="flex justify-between pt-4">
-
-        <button onClick={prev}>
-          이전
-        </button>
-
-        <button
-          onClick={next}
-          className="bg-blue-500 text-white px-4 py-2 rounded"
+        {/* 디바이스 프리뷰 */}
+        <div
+          onClick={()=>{
+            startEditing();
+            setOpen(true);
+          }}
+          className="
+            bg-gray-100 rounded-2xl p-10 flex justify-center
+            cursor-pointer hover:bg-gray-200 transition
+          "
         >
-          다음 →
-        </button>
+
+          <div className="
+            relative w-28 h-52 border-4 border-gray-800
+            rounded-2xl overflow-hidden
+          ">
+
+            {/* background */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background: bgPreview
+                  ? `url(${bgPreview}) center / cover`
+                  : splashConfig.backgroundColor
+              }}
+            />
+
+            {/* logo */}
+            {logoPreview && (
+              <div
+                className="absolute"
+                style={{
+                  left:`calc(50% + ${splashConfig.offsetX || 0}px)`,
+                  top:`calc(50% + ${splashConfig.offsetY || 0}px)`,
+                  transform:"translate(-50%, -50%)"
+                }}
+              >
+                <img
+                  src={logoPreview}
+                  className="pointer-events-none select-none"
+                  style={{
+                    width:`${112 * (splashConfig.logoScale || 0.5)}px`
+                  }}
+                />
+              </div>
+            )}
+
+          </div>
+
+        </div>
 
       </div>
+
+      {/* ---------------- 로딩 인디케이터 ---------------- */}
+      <div className="space-y-4">
+
+        <div className="flex justify-between items-center">
+
+          <h2 className="text-sm font-medium">
+            로딩 인디케이터
+          </h2>
+
+          <span className="text-sm text-gray-400">
+            디바이스를 클릭하여 설정하세요
+          </span>
+
+        </div>
+
+        <div className="bg-gray-100 rounded-2xl p-10 flex justify-center">
+
+          <div className="
+            w-28 h-52 border-4 border-gray-800
+            rounded-2xl bg-white flex items-center justify-center
+          ">
+
+            <div className="
+              w-6 h-6 border-2 border-gray-400
+              border-t-transparent rounded-full animate-spin
+            "/>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {open && (
+        <SplashModal onClose={()=>setOpen(false)} />
+      )}
 
     </div>
 

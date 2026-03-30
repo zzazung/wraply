@@ -4,47 +4,54 @@ import { useAppBuildStore } from "@/stores/appBuildStore";
 
 export default function StepAdvanced(){
 
-  const { enableKakao, kakaoKey, set, prev, next } = useAppBuildStore();
+  const enableKakao = useAppBuildStore(s=>s.enableKakao);
+  const kakaoKey = useAppBuildStore(s=>s.kakaoKey);
+  const set = useAppBuildStore(s=>s.set);
 
   return(
 
-    <div className="max-w-xl mx-auto space-y-6">
+    <div className="max-w-md mx-auto space-y-6">
 
       <h1 className="text-xl font-semibold text-center">
         고급 설정
       </h1>
 
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={enableKakao}
-          onChange={e=>set("enableKakao", e.target.checked)}
-        />
-        카카오 로그인
-      </label>
+      {/* 카카오 로그인 */}
+      <div className="space-y-3">
 
-      {enableKakao && (
-        <input
-          value={kakaoKey}
-          onChange={e=>set("kakaoKey", e.target.value)}
-          placeholder="Kakao App Key"
-          className="w-full border rounded p-3"
-        />
-      )}
+        <label className="flex items-center gap-2 text-sm">
 
-      {/* 버튼 */}
-      <div className="flex justify-between pt-4">
+          <input
+            type="checkbox"
+            checked={enableKakao}
+            onChange={e=>{
+                const checked = e.target.checked;
 
-        <button onClick={prev}>
-          이전
-        </button>
+                set("enableKakao", checked);
 
-        <button
-          onClick={next}
-          className="bg-blue-500 text-white px-4 py-2 rounded"
-        >
-          다음 →
-        </button>
+                if (!checked){
+                    set("kakaoKey", "");
+                }
+            }}
+          />
+
+          카카오 로그인 사용
+
+        </label>
+
+        {enableKakao && (
+
+          <input
+            value={kakaoKey}
+            onChange={e=>set("kakaoKey", e.target.value.trim())}
+            placeholder="Kakao App Key"
+            className="
+              w-full border rounded-md px-3 py-2
+              focus:outline-none focus:ring-2 focus:ring-blue-500
+            "
+          />
+
+        )}
 
       </div>
 

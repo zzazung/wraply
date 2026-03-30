@@ -8,6 +8,8 @@ const requireTenant = require("./middleware/requireTenant");
 const authRoutes = require("./routes/auth");
 const agentRoutes = require("./routes/agent");
 const projectRoutes = require("./routes/projects");
+const projectTargetsRouter = require("./routes/projectTargets");
+const workflowRoutes = require("./routes/workflows");
 const jobsRouter = require("./routes/jobs");
 const artifactRoutes = require("./routes/artifacts");
 const installRoutes = require("./routes/install");
@@ -53,6 +55,13 @@ app.use(express.urlencoded({
   limit: "2mb"
 }));
 
+app.use("/auth", authRoutes);
+app.use("/internal", internalRouter);
+
+app.use(requireAuth);
+app.use(requireTenant);
+
+
 app.use(
   "/downloads",
   express.static(
@@ -64,18 +73,37 @@ app.use(
   )
 );
 
-app.use("/auth", authRoutes);
-app.use("/internal", internalRouter);
-
-app.use(requireAuth);
-app.use(requireTenant);
-
 app.use("/agent", agentRoutes);
 app.use("/projects", projectRoutes);
+app.use("/projects/:projectId/targets", projectTargetsRouter);
+app.use("/workflows", workflowRoutes);
 app.use("/jobs", jobsRouter);
 app.use("/artifacts", artifactRoutes);
 app.use("/install", installRoutes);
 app.use("/android/signing", androidSigningRouter);
+
+/* --------------------------------------------------
+   Workflow Bus (🔥 추가)
+-------------------------------------------------- */
+
+const { subscribeWorkflowNext } = require("@wraply/shared/bus/workflowBus");
+const { enqueueStep } = require("./services/workflowQueue");
+
+subscribeWorkflowNext(async (data) => {
+
+  console.log("[workflowBus] next step:", data);
+
+  try {
+
+    await enqueueStep(data);
+
+  } catch (err) {
+
+    console.error("[workflowBus] enqueue error:", err);
+
+  }
+
+});
 
 /**
  * 404 handler

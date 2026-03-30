@@ -139,14 +139,15 @@ async function runStep({ step, tenantId, context, jobId }) {
 
   console.log("[workflow] runStep:", {
     jobId,
-    task: step.task
+    task: step.target
   });
 
   const job = await queue.add("ai-task", {
     jobId,
-    task: step.task,
+    task: step.target,
     payload: context,
-    tenantId
+    config: context.target?.config || {},
+    tenantId,
   }, {
     attempts: 3,
     backoff: {
@@ -160,7 +161,7 @@ async function runStep({ step, tenantId, context, jobId }) {
   return {
     jobId,
     bullJobId: job.id,
-    task: step.task
+    task: step.target
   };
 
 }
@@ -240,7 +241,7 @@ async function waitStepResult(job) {
 
 function mergeContext(currentContext, step, result) {
 
-  const schema = TASK_SCHEMA[step.task];
+  const schema = TASK_SCHEMA[step.target];
 
   const nextContext = {
     ...currentContext,
@@ -250,7 +251,7 @@ function mergeContext(currentContext, step, result) {
     history: [
       ...(currentContext.history || []),
       {
-        step: step.task,
+        step: step.target,
         output: result.output
       }
     ]
@@ -260,7 +261,7 @@ function mergeContext(currentContext, step, result) {
     nextContext[schema.output] = result.output;
   }
 
-  nextContext[`${step.task}_result`] = result.output;
+  nextContext[`${step.target}_result`] = result.output;
 
   return nextContext;
 
@@ -275,8 +276,21 @@ async function executeWorkflow({
   tenantId,
   userId,
   context = {},
-  jobId
+  jobId,
+  projectId
 }) {
+
+  const targetRows = await query(`
+    SELECT type, config
+    FROM project_targets
+    WHERE project_id = ?
+  `, [projectId]);
+
+  const targetMap = {};
+
+  for (const t of targetRows) {
+    targetMap[t.type] = JSON.parse(t.config || "{}");
+}
 
   await ensureQueueEventsReady();
 
@@ -292,6 +306,7 @@ async function executeWorkflow({
 
   let currentContext = {
     ...context,
+    target: selectedTarget,
     history: []
   };
 
@@ -316,21 +331,28 @@ async function executeWorkflow({
 
     for (const step of workflow) {
 
-      console.log(`[workflow] ▶ step: ${step.task}`);
+      console.log(`[workflow] ▶ step: ${step.target}`);
 
       if (!shouldRunStep(step, currentContext)) {
-        console.log("[workflow] skip:", step.task);
+        console.log("[workflow] skip:", step.target);
         continue;
       }
 
-      const filteredContext = pickContext(step.task, currentContext);
+      const filteredContext = {
+        ...pickContext(step.target, currentContext),
+
+        target: {
+          type: step.target,
+          config: targetMap[step.target] || {}
+        }
+      };
 
       publishEvent({
         type: "agent_event",
         event: "STEP_START",
         tenantId,
         jobId: finalJobId,
-        step: step.task,
+        step: step.target,
         context: filteredContext
       });
 
@@ -352,7 +374,7 @@ async function executeWorkflow({
           event: "STEP_FAILED",
           tenantId,
           jobId: finalJobId,
-          step: step.task,
+          step: step.target,
           error: result.error
         });
 
@@ -364,7 +386,7 @@ async function executeWorkflow({
 
         return {
           success: false,
-          failedStep: step.task,
+          failedStep: step.target,
           results,
           context: currentContext
         };
@@ -388,7 +410,7 @@ async function executeWorkflow({
       await saveAgentStep({
         jobId: finalJobId,
         tenantId,
-        step: step.task,
+        step: step.target,
         input: filteredContext,
         output: result.output ?? {}
       });
@@ -435,7 +457,7 @@ async function executeWorkflow({
       }
 
       results.push({
-        step: step.task,
+        step: step.target,
         jobId: finalJobId,
         output: result.output
       });
@@ -445,7 +467,7 @@ async function executeWorkflow({
         event: "STEP_DONE",
         tenantId,
         jobId: finalJobId,
-        step: step.task,
+        step: step.target,
         output: result.output
       });
 

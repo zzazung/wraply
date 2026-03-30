@@ -1,9 +1,9 @@
 // wraply-api/websocket/index.js
 
 const WebSocket = require("ws")
-const redis = require("@wraply/shared/redis")
 const jwt = require("../lib/jwt")
 const { query } = require("@wraply/shared/db")
+const { createSubscriber } = require("@wraply/shared/redis");
 
 const {
   LOG_CHANNEL,
@@ -145,7 +145,7 @@ function initRedisSubscriber() {
 
   if (redisSub) return
 
-  redisSub = redis.duplicate()
+  redisSub = createSubscriber()
 
   redisSub.subscribe(
     LOG_CHANNEL,

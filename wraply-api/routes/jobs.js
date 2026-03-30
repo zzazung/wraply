@@ -9,11 +9,7 @@ const { query } = require("@wraply/shared/db");
 const { enqueueBuild } = require("../queue/buildQueue");
 const { CANCEL_CHANNEL } = require("@wraply/shared/constants/queues");
 
-const { requireAuth } = require("../middleware/auth");
-
 const router = express.Router();
-
-router.use(requireAuth);
 
 if (!process.env.CI_ROOT) {
   throw new Error("CI_ROOT is required")
@@ -90,11 +86,11 @@ router.post("/", async (req, res) => {
     }
 
     /**
-     * 🔥 project 소유권 검증
+     * 🔥 project 소유권 검증 + settings 가져오기
      */
     const projectRows = await query(
       `
-      SELECT id
+      SELECT id, settings
       FROM projects
       WHERE id = ?
       AND tenant_id = ?
@@ -107,6 +103,52 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ error: "Project not found" });
     }
 
+    const projectSettings = projectRows[0].settings
+      ? JSON.parse(projectRows[0].settings)
+      : {};
+
+    /**
+     * 🔥 project_targets 가져오기
+     */
+    const targetRows = await query(
+      `
+      SELECT type, config
+      FROM project_targets
+      WHERE project_id = ?
+      AND tenant_id = ?
+      `,
+      [projectId, tenantId]
+    );
+
+    let targetConfig = {};
+
+    for (const t of targetRows) {
+      if (t.type === platform) {
+        targetConfig = JSON.parse(t.config || "{}");
+        break;
+      }
+    }
+
+    /**
+     * 🔥 최종 settings (핵심)
+     */
+    const finalSettings = {
+      base: projectSettings,
+
+      target: {
+        type: platform,
+        config: targetConfig
+      }
+    };
+
+    // ❗ 추가 settings은 target.config에만 merge
+    if (settings?.target?.config) {
+      finalSettings.target.config = {
+        ...finalSettings.target.config,
+        ...settings.target.config
+      };
+    }
+
     const jobId = uuidv4();
     const safeName = packageName.replace(/\./g, "_");
 
@@ -117,11 +159,6 @@ router.post("/", async (req, res) => {
         tenant_id,
         project_id,
         platform,
-        package_name,
-        safe_name,
-        app_name,
-        url,
-        scheme,
         status,
         progress,
         worker_id,
@@ -130,32 +167,21 @@ router.post("/", async (req, res) => {
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0, NULL, NULL, ?, NOW(), NOW())
+      VALUES (?, ?, ?, ?, 'queued', 0, NULL, NULL, ?, NOW(), NOW())
       `,
       [
         jobId,
         tenantId,
         projectId,
         platform,
-        packageName,
-        safeName,
-        appName || null,
-        url || null,
-        scheme || null,
-        JSON.stringify(settings || {})
+        JSON.stringify(finalSettings)
       ]
     );
 
     await enqueueBuild({
       jobId,
       tenantId,
-      projectId,
-      platform,
-      packageName,
-      safeName,
-      appName,
-      url,
-      settings
+      settings: finalSettings
     });
 
     res.json({ success: true, jobId });
@@ -186,21 +212,11 @@ router.get("/", async (req, res) => {
         tenant_id,
         project_id,
         platform,
-        package_name,
-        safe_name,
-        app_name,
-        url,
-        scheme,
+        settings,
         status,
         progress,
-        worker_id,
-        build_host,
         created_at,
-        updated_at,
-        finished_at,
-        error_reason,
-        log_path,
-        artifact_dir
+        updated_at
       FROM jobs
       WHERE tenant_id = ?
       ORDER BY created_at DESC
@@ -209,7 +225,20 @@ router.get("/", async (req, res) => {
       [tenantId]
     );
 
-    res.json({ items: rows });
+    const items = rows.map(row => {
+
+      const settings = JSON.parse(row.settings || "{}");
+
+      return {
+        ...row,
+        appName: settings?.base?.appName || null,
+        url: settings?.base?.url || null,
+        target: settings?.target?.type || null
+      };
+
+    });
+
+    res.json({ items });
 
   } catch (err) {
 

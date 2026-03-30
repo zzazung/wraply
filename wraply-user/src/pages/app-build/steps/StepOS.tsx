@@ -4,41 +4,57 @@ import { useAppBuildStore } from "@/stores/appBuildStore";
 
 export default function StepOS(){
 
-  const { os, set, next } = useAppBuildStore();
+  const platform = useAppBuildStore(s=>s.platform);
+  const set = useAppBuildStore(s=>s.set);
 
-  return(
+  return (
 
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-md mx-auto space-y-8">
 
-      <h1 className="text-xl font-semibold text-center">
-        OS 선택
-      </h1>
+      <h2 className="text-center text-xl font-semibold">
+        OS를 선택하세요
+      </h2>
 
       <div className="grid grid-cols-2 gap-4">
 
-        {["android","ios"].map(o=>(
-          <div
-            key={o}
-            onClick={()=>set("os", o)}
-            className={`
-              border rounded-xl p-6 cursor-pointer text-center
-              ${os === o ? "border-blue-500 bg-blue-50" : ""}
-            `}
-          >
-            {o.toUpperCase()}
-          </div>
-        ))}
-
-      </div>
-
-      {/* 버튼 */}
-      <div className="flex justify-end pt-4">
-
+        {/* ANDROID */}
         <button
-          onClick={next}
-          className="bg-blue-500 text-white px-4 py-2 rounded"
+          onClick={()=>set("platform","android")}
+          className={`
+            h-28 rounded-xl border transition-all
+
+            flex flex-col items-center justify-center gap-2
+
+            ${platform === "android"
+              ? "border-blue-500 bg-blue-50 scale-[1.02]"
+              : "bg-white hover:border-gray-400"
+            }
+          `}
         >
-          다음 →
+          <span className="text-2xl">🤖</span>
+          <span className="text-sm font-medium">
+            Android
+          </span>
+        </button>
+
+        {/* IOS */}
+        <button
+          onClick={()=>set("platform","ios")}
+          className={`
+            h-28 rounded-xl border transition-all
+
+            flex flex-col items-center justify-center gap-2
+
+            ${platform === "ios"
+              ? "border-blue-500 bg-blue-50 scale-[1.02]"
+              : "bg-white hover:border-gray-400"
+            }
+          `}
+        >
+          <span className="text-2xl">🍎</span>
+          <span className="text-sm font-medium">
+            iOS
+          </span>
         </button>
 
       </div>
